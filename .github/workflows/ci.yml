@@ -97,6 +97,46 @@ jobs:
       - name: Build (strict template type-check)
         run: npx ng build
 
+  docker:
+    name: Docker image (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: scm-core
+            context: scm-core-service
+            dockerfile: scm-core-service/Dockerfile
+            platforms: linux/amd64
+          - image: scm-ai
+            context: scm-ai-service
+            dockerfile: scm-ai-service/Dockerfile
+            platforms: linux/amd64
+          - image: scm-agentcore
+            context: scm-ai-service
+            dockerfile: scm-ai-service/Dockerfile.agentcore
+            platforms: linux/arm64  # AgentCore Runtime runs ARM64 containers
+          - image: scm-ui
+            context: scm-ui
+            dockerfile: scm-ui/Dockerfile
+            platforms: linux/amd64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU (ARM64 emulation)
+        if: contains(matrix.platforms, 'arm64')
+        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platforms }}
+          push: false
+          tags: ${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
   compose:
     name: Docker Compose config
     runs-on: ubuntu-latest
