@@ -1,5 +1,7 @@
 # Supply Chain Management System
 
+[![CI](https://github.com/aishu136/SupplySphere/actions/workflows/ci.yml/badge.svg)](https://github.com/aishu136/SupplySphere/actions/workflows/ci.yml)
+
 An event-driven supply chain control tower. It tracks inventory, purchase orders and shipments, detects
 problems in real time, and gives operators an AI copilot plus computer-vision dock inspection.
 

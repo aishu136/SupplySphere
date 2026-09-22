@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-service:
+    name: Core service (Spring Boot)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scm-core-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: scm-core-service/pom.xml
+      - name: Test and package
+        run: mvn -B verify
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-service-surefire-reports
+          path: scm-core-service/target/surefire-reports/
+
+  stream-processor:
+    name: Stream processor (Flink)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scm-stream-processor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: scm-stream-processor/pom.xml
+      - name: Build job jar
+        run: mvn -B package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scm-stream-processor-jar
+          path: scm-stream-processor/target/scm-stream-processor-*.jar
+          retention-days: 7
+
+  ai-service:
+    name: AI service (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scm-ai-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scm-ai-service/requirements.txt
+      - name: Install system libraries for OpenCV
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+      - name: Install dependencies (CPU-only PyTorch)
+        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+      - name: Run tests
+        # Tests stub YOLO, embeddings and the core API, so no AWS credentials or model downloads are needed.
+        run: pytest -q
+
+  ui:
+    name: UI (Angular)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scm-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: scm-ui/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build (strict template type-check)
+        run: npx ng build
+
+  compose:
+    name: Docker Compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet
