@@ -1,0 +1,26 @@
+# Java
+target/
+*.class
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+scm-ai-service/data/
+*.pt
+.env
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
+
+# Runtime data
+data/
+scm-core-service/data/
+
+# IDE
+.idea/
+.vscode/
+*.iml

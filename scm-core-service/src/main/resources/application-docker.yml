@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres}:5432/scm
+    username: ${DB_USER:scm}
+    password: ${DB_PASSWORD:scm}
+  h2:
+    console:
+      enabled: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+
+scm:
+  kafka:
+    enabled: true
+  feeds:
+    inbox: /data/inbox/supplier-feeds

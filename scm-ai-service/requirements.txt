@@ -1,0 +1,34 @@
+# Web API
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pydantic-settings>=2.4
+httpx>=0.27
+
+# LangChain + AWS Bedrock
+langchain>=1.0,<2
+langchain-aws>=1.0
+langchain-text-splitters>=1.0
+langgraph>=1.0
+boto3>=1.40
+
+# MCP (server + LangChain adapter)
+mcp>=1.12
+langchain-mcp-adapters>=0.1.9
+
+# Bedrock AgentCore runtime
+bedrock-agentcore>=0.1.2
+
+# Reinforcement learning (replenishment environment)
+gymnasium>=1.0
+
+# Kafka
+aiokafka>=0.11
+
+# Computer vision
+ultralytics>=8.3
+opencv-python-headless>=4.10
+numpy>=1.26
+
+# Tests
+pytest>=8.0

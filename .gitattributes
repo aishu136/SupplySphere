@@ -1,0 +1,6 @@
+# Keep LF in the repo and working tree: files run inside Linux containers (Dockerfiles, nginx, Python).
+* text=auto eol=lf
+*.jar binary
+*.png binary
+*.jpg binary
+*.pt binary

@@ -1,0 +1,124 @@
+export interface Supplier {
+  id: number;
+  name: string;
+  contactEmail: string;
+  country: string;
+  rating: number;
+  leadTimeDays: number;
+}
+
+export interface Product {
+  id: number;
+  sku: string;
+  name: string;
+  category: string;
+  unitPrice: number;
+  supplier: Supplier;
+}
+
+export interface InventoryItem {
+  id: number;
+  product: Product;
+  warehouseCode: string;
+  quantity: number;
+  reorderPoint: number;
+  reorderQuantity: number;
+  updatedAt: string;
+  lowStock: boolean;
+}
+
+export type OrderStatus = 'CREATED' | 'APPROVED' | 'SHIPPED' | 'RECEIVED' | 'CANCELLED';
+
+export interface PurchaseOrder {
+  id: number;
+  orderNumber: string;
+  supplier: Supplier;
+  product: Product;
+  warehouseCode: string;
+  quantity: number;
+  status: OrderStatus;
+  createdAt: string;
+  expectedDelivery: string;
+}
+
+export type ShipmentStatus = 'CREATED' | 'IN_TRANSIT' | 'DELAYED' | 'DELIVERED' | 'DAMAGED';
+
+export interface Shipment {
+  id: number;
+  trackingNumber: string;
+  purchaseOrder: PurchaseOrder | null;
+  carrier: string;
+  origin: string;
+  destination: string;
+  status: ShipmentStatus;
+  eta: string;
+  lastUpdated: string;
+  inspectionNotes: string | null;
+}
+
+export interface Alert {
+  alertId: string;
+  type: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  message: string;
+  entityId: string | null;
+  timestamp: string;
+  source: string;
+}
+
+export interface DashboardSummary {
+  skus: number;
+  unitsOnHand: number;
+  lowStockItems: number;
+  openOrders: number;
+  shipmentsInTransit: number;
+  delayedShipments: number;
+  recentAlerts: number;
+}
+
+export interface ChatReply {
+  reply: string;
+  tools_used: string[];
+}
+
+export interface PolicyEvaluation {
+  avg_cost: number;
+  fill_rate: number;
+  avg_on_hand: number;
+  orders_per_episode: number;
+}
+
+export interface ReplenishmentRecommendation {
+  sku: string;
+  productName: string;
+  warehouseCode: string;
+  onHand: number;
+  onOrder: number;
+  reorderPoint: number;
+  reorderQuantity: number;
+  estimatedDailyDemand: number;
+  learnedPolicy: { reorder_point: number; order_quantity: number };
+  rlOrderQuantity: number;
+  baselineOrderQuantity: number;
+  recommendedQuantity: number;
+  policyUsed: 'rl' | 'baseline';
+  rl: PolicyEvaluation;
+  baseline: PolicyEvaluation;
+  costSavingPct: number;
+}
+
+export interface Detection {
+  label: string;
+  confidence: number;
+  box: number[];
+}
+
+export interface InspectionResult {
+  damaged: boolean;
+  summary: string;
+  item_counts: Record<string, number>;
+  detections: Detection[];
+  codes: string[];
+  llm_assessment: { damaged: boolean; severity: string; findings: string[]; recommended_action: string } | null;
+  annotated_image: string | null;
+}
