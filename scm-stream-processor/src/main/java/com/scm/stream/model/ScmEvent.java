@@ -1,12 +1,10 @@
 package com.scm.stream.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
-import java.util.HashMap;
-import java.util.Map;
-
-/** Mirrors com.scm.core.event.SupplyChainEvent. Public fields + no-arg ctor make it a Flink POJO. */
-@JsonIgnoreProperties(ignoreUnknown = true)
+/**
+ * The fields of the services' SupplyChainEvent envelope (and its data map) that the detectors use,
+ * flattened. Public fields of basic types make it a Flink POJO with native serializers only: a
+ * Map field would fall back to Kryo, which is slow and broke on JDK 17+ module restrictions.
+ */
 public class ScmEvent {
 
     public String eventId;
@@ -14,25 +12,38 @@ public class ScmEvent {
     public String source;
     public String entityId;
     public String timestamp;
-    public Map<String, Object> data = new HashMap<>();
+
+    // From data: inventory and order events
+    public String sku;
+    public String warehouseCode;
+    public Integer quantity;
+    public Integer reorderPoint;
+
+    // From data: shipment events
+    public String status;
+    public String eta;
+    public String carrier;
+    public String destination;
 
     public ScmEvent() {}
 
-    public String str(String key) {
-        Object v = data.get(key);
-        return v == null ? null : v.toString();
+    public int quantity() {
+        return required(quantity, "quantity");
     }
 
-    public int integer(String key) {
-        Object v = data.get(key);
-        if (v instanceof Number n) {
-            return n.intValue();
+    public int reorderPoint() {
+        return required(reorderPoint, "reorderPoint");
+    }
+
+    private int required(Integer value, String field) {
+        if (value == null) {
+            throw new IllegalArgumentException("Event " + type + " (" + entityId + ") has no " + field);
         }
-        return v == null ? 0 : Integer.parseInt(v.toString());
+        return value;
     }
 
     @Override
     public String toString() {
-        return type + "(" + entityId + ")" + data;
+        return type + "(" + entityId + ")";
     }
 }

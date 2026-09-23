@@ -23,7 +23,7 @@ public class DemandSpikeDetector extends ProcessWindowFunction<ScmEvent, AlertEv
         int units = 0;
         for (ScmEvent e : orders) {
             count++;
-            units += e.integer("quantity");
+            units += e.quantity();
         }
         if (count >= maxOrders || units >= maxUnits) {
             long minutes = (ctx.window().getEnd() - ctx.window().getStart()) / 60_000;

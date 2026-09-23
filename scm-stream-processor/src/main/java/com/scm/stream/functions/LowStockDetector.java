@@ -23,8 +23,8 @@ public class LowStockDetector extends KeyedProcessFunction<String, ScmEvent, Ale
 
     @Override
     public void processElement(ScmEvent event, Context ctx, Collector<AlertEvent> out) throws Exception {
-        int quantity = event.integer("quantity");
-        int reorderPoint = event.integer("reorderPoint");
+        int quantity = event.quantity();
+        int reorderPoint = event.reorderPoint();
         boolean low = quantity <= reorderPoint;
         boolean alreadyAlerted = Boolean.TRUE.equals(alerted.value());
 
@@ -32,8 +32,8 @@ public class LowStockDetector extends KeyedProcessFunction<String, ScmEvent, Ale
             String severity = quantity == 0 ? "CRITICAL" : "HIGH";
             out.collect(AlertEvent.of("LOW_STOCK", severity,
                     "%s at %s is at %d units (reorder point %d)".formatted(
-                            event.str("sku"), event.str("warehouseCode"), quantity, reorderPoint),
-                    event.str("sku")));
+                            event.sku, event.warehouseCode, quantity, reorderPoint),
+                    event.sku));
             alerted.update(true);
         } else if (!low && alreadyAlerted) {
             alerted.clear();

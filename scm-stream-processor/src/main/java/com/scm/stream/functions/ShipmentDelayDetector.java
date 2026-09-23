@@ -39,15 +39,15 @@ public class ShipmentDelayDetector extends KeyedProcessFunction<String, ScmEvent
 
     @Override
     public void processElement(ScmEvent event, Context ctx, Collector<AlertEvent> out) throws Exception {
-        String status = event.str("status");
-        String eta = event.str("eta");
-        destination.update(event.str("destination"));
+        String status = event.status;
+        String eta = event.eta;
+        destination.update(event.destination);
         cancelTimer(ctx);
 
         if ("DELAYED".equals(status)) {
             out.collect(AlertEvent.of("SHIPMENT_DELAYED", "HIGH",
                     "Carrier %s reported shipment %s to %s as delayed".formatted(
-                            event.str("carrier"), ctx.getCurrentKey(), event.str("destination")),
+                            event.carrier, ctx.getCurrentKey(), event.destination),
                     ctx.getCurrentKey()));
         } else if (OPEN.contains(status) && eta != null) {
             long now = ctx.timerService().currentProcessingTime();
