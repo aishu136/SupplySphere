@@ -15,7 +15,7 @@ replenishment and computer-vision dock inspection.
                   ┌──────────────────────────────┐   REST    ┌─────────────────────────────────┐
                   │ api-gateway (Spring Cloud GW)│◄──────────│ scm-ai-service (Python)          │
                   │ routing · circuit breakers · │           │  LangChain agent → Claude/Bedrock│
-                  │ fallbacks · dashboard compose│           │  RAG · computer vision · RL      │
+                  │ fallbacks · dashboard compose│           │  LangGraph · RAG · vision · RL   │
                   └──┬──────┬──────┬──────┬──────┬┘           │  MCP server (12 tools)           │
                      ▼      ▼      ▼      ▼      ▼            └──────────────┬──────────────────┘
                ┌────────┐┌─────────┐┌───────┐┌──────────┐┌───────┐           │ vision results
@@ -44,6 +44,7 @@ replenishment and computer-vision dock inspection.
 | **Apache Flink 1.20** | `scm-stream-processor` | Stateful stream processing: edge-triggered low-stock alerts (keyed state), shipment-ETA timers (processing-time timers), demand spikes (tumbling windows) |
 | **OpenTelemetry + Jaeger** | all Java services | Traces follow a request across the gateway, service-to-service REST calls and Kafka hops |
 | **LangChain 1.x** | `scm-ai-service/app/agent.py` | `create_agent` with Claude on Bedrock (`ChatBedrockConverse`), per-session memory (LangGraph checkpointer) |
+| **LangGraph** | `scm-ai-service/app/workflows/` | Exception-resolution workflow as an explicit `StateGraph`: branches by alert type, gathers live context and the RL recommendation, has Claude draft a plan, then pauses (`interrupt`) for human approval before executing. State is checkpointed to SQLite, so pending approvals survive restarts. The chat agent (`create_agent`) also runs on LangGraph, with a LangGraph checkpointer for memory. See [Exception workflows](#exception-workflows-langgraph) |
 | **MCP** | `scm-ai-service/app/mcp_server.py` | FastMCP server exposing 12 tools (inventory, POs, shipments, suppliers, alerts, policy search, RL replenishment). The agent loads them with `langchain-mcp-adapters`; Claude Desktop, Claude Code or an AgentCore Gateway can use them too |
 | **Tools** | MCP server | Read tools, plus action tools (`create_purchase_order`, `update_shipment_status`) that go through the gateway and each service's business rules |
 | **RAG** | `scm-ai-service/app/rag.py` | Supplier contracts and SOPs in `knowledge_base/`, chunked and embedded with Titan v2 into LangChain's vector store (persisted to JSON); answers cite their source file |
@@ -154,6 +155,52 @@ YOLO model on your dock photos with classes such as `dent`, `tear`, `crushed` an
 then point `YOLO_MODEL` at the weights. Until then, tick **Claude visual review** in the UI to get a damage
 assessment from Claude.
 
+## Exception workflows (LangGraph)
+
+When Flink raises a `LOW_STOCK` or `SHIPMENT_DELAYED` alert, the AI service (consuming `scm.alerts`)
+starts a LangGraph workflow for it. You can also start one from the **Exception workflows** page.
+
+```mermaid
+graph TD;
+    __start__([start]) --> classify;
+    classify -.->|LOW_STOCK| low_stock_context;
+    classify -.->|SHIPMENT_DELAYED| shipment_context;
+    classify -.->|other| finish;
+    low_stock_context --> retrieve_policies;
+    shipment_context --> retrieve_policies;
+    retrieve_policies --> draft_plan;
+    draft_plan -.->|actions proposed| human_approval;
+    draft_plan -.->|nothing to do| finish;
+    human_approval -.->|approved| execute;
+    human_approval -.->|rejected| finish;
+    execute --> finish;
+    finish --> __end__([end]);
+```
+
+| Node | What it does |
+|---|---|
+| `classify` | Routes by alert type (conditional edges) |
+| `low_stock_context` | Stock per warehouse, open POs, and the RL agent's recommendation for the SKU |
+| `shipment_context` | The shipment, its purchase order, and stock at the destination |
+| `retrieve_policies` | RAG over the SOPs (reorder policy or delay escalation) |
+| `draft_plan` | Claude produces a structured `Plan` (summary, rationale, actions). If Claude is unreachable, a rule-based plan built from the RL recommendation is used. Actions are allow-listed and validated |
+| `human_approval` | `interrupt()`: the graph stops until a person approves, edits quantities, or rejects |
+| `execute` | Runs the approved actions through the API gateway (create PO, update shipment status) |
+| `finish` | Records the outcome: `completed`, `partially_failed`, `rejected` or `no_action` |
+
+**Durable state.** Checkpoints go to SQLite (`data/workflows.sqlite`) through `AsyncSqliteSaver`, so a
+workflow waiting for approval survives a restart and resumes where it stopped.
+
+**Idempotent.** The thread ID is `exception-<alertId>`, so a redelivered alert reuses its workflow
+instead of starting a second one.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /ai/workflows/exceptions` | Workflows, pending approvals first |
+| `POST /ai/workflows/exceptions {"alert": {...}}` | Start a workflow for an alert |
+| `POST /ai/workflows/exceptions/{id}/decision {"approved": true, "actions": [...], "comment": "..."}` | Approve (optionally with edited actions) or reject |
+| `GET /ai/workflows/exceptions/graph` | The compiled graph as Mermaid |
+
 ## Reinforcement learning replenishment
 
 **Problem.** A fixed rule ("order the standard quantity at the reorder point") ignores each item's cost
@@ -215,6 +262,7 @@ when its position's reorder point, reorder quantity, price or lead time changes.
 
 - **Dashboard:** the seed data has two low-stock positions and one overdue ocean shipment (`TRK-DEMO000002`).
 - **Inventory:** adjust `SKU-3002 @ WH-EAST` by `-90` and watch Flink's LOW_STOCK alert appear live.
+- **Exception workflows:** start one from a LOW_STOCK alert, edit the proposed quantity, approve it.
 - **RL replenishment:** see where the learned policy beats the SOP rule, then place its PO.
 - **Assistant:** ask *"Which items are below their reorder point, and what does the reorder policy say to do?"*
 - **Vision:** open a shipment's **Inspect** link and upload a photo of the package.
@@ -223,6 +271,6 @@ when its position's reorder point, reorder quantity, price or lead time changes.
 
 ```bash
 cd scm-platform && mvn verify            # 6 services, 16 tests: saga, idempotency, circuit breakers (embedded Kafka)
-cd scm-ai-service && pytest              # RL env + agent, RAG index (offline), vision, MCP tools, event contract
+cd scm-ai-service && pytest              # LangGraph workflow, RL, RAG (offline), vision, MCP tools, events
 cd scm-ui && npx ng build                # strict template type-check
 ```

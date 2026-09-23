@@ -2,8 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
-  Alert, ChatReply, DashboardSummary, InspectionResult, InventoryItem, OrderStatus, Product,
-  PurchaseOrder, ReplenishmentRecommendation, Shipment, ShipmentStatus,
+  Alert, ChatReply, DashboardSummary, ExceptionWorkflow, InspectionResult, InventoryItem, OrderStatus, Product,
+  PurchaseOrder, ReplenishmentRecommendation, Shipment, ShipmentStatus, WorkflowAction,
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -53,6 +53,18 @@ export class ApiService {
 
   rlTrain(iterations: number) {
     return this.http.post<unknown>('/ai/rl/train', { iterations });
+  }
+
+  exceptionWorkflows() {
+    return this.http.get<ExceptionWorkflow[]>('/ai/workflows/exceptions');
+  }
+
+  startExceptionWorkflow(alert: Alert) {
+    return this.http.post<ExceptionWorkflow>('/ai/workflows/exceptions', { alert });
+  }
+
+  decideExceptionWorkflow(threadId: string, approved: boolean, actions: WorkflowAction[] | null, comment: string) {
+    return this.http.post<ExceptionWorkflow>(`/ai/workflows/exceptions/${threadId}/decision`, { approved, actions, comment });
   }
 
   inspect(file: File, trackingNumber: string | null, useLlm: boolean) {

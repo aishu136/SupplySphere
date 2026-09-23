@@ -109,6 +109,33 @@ export interface ReplenishmentRecommendation {
   costSavingPct: number;
 }
 
+export interface WorkflowAction {
+  type: 'create_purchase_order' | 'update_shipment_status';
+  sku?: string | null;
+  warehouse_code?: string | null;
+  quantity?: number | null;
+  tracking_number?: string | null;
+  status?: string | null;
+  reason: string;
+}
+
+export type WorkflowStatus = 'awaiting_approval' | 'completed' | 'partially_failed' | 'rejected' | 'no_action' | 'running';
+
+/** A LangGraph exception-resolution run (see scm-ai-service/app/workflows). */
+export interface ExceptionWorkflow {
+  threadId: string;
+  status: WorkflowStatus;
+  alert: Alert;
+  kind: 'low_stock' | 'shipment_delay' | 'unsupported';
+  context: Record<string, unknown> | null;
+  plan: { summary: string; rationale: string; actions: WorkflowAction[] } | null;
+  planner: 'claude' | 'rules' | null;
+  decision: { approved: boolean; actions: WorkflowAction[]; comment: string } | null;
+  results: { action: WorkflowAction; ok: boolean; detail: string }[];
+  outcome: string | null;
+  updatedAt: string | null;
+}
+
 export interface Detection {
   label: string;
   confidence: number;

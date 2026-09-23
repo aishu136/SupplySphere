@@ -24,6 +24,7 @@ export class App {
     { path: '/inventory', label: 'Inventory' },
     { path: '/orders', label: 'Purchase orders' },
     { path: '/shipments', label: 'Shipments' },
+    { path: '/exceptions', label: 'Exception workflows' },
     { path: '/replenishment', label: 'RL replenishment' },
     { path: '/assistant', label: 'AI assistant' },
     { path: '/vision', label: 'Vision inspection' },

@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     kafka_enabled: bool = False
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_vision_topic: str = "scm.vision.events"
+    kafka_alerts_topic: str = "scm.alerts"
+
+    workflow_db_file: Path = BASE_DIR / "data" / "workflows.sqlite"
 
     yolo_model: str = "yolo11n.pt"
     vision_confidence: float = 0.35

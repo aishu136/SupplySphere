@@ -1,13 +1,16 @@
-"""FastAPI entrypoint for the AI service: agent chat, RAG and computer-vision inspection."""
+"""FastAPI entrypoint for the AI service: agent chat, RAG, RL, LangGraph workflows and vision."""
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import PlainTextResponse
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel, Field
 
 from app import agent, events, rag, scm_client, vision
 from app.config import get_settings
 from app.rl import service as rl_service
+from app.workflows import service as workflows
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
 log = logging.getLogger(__name__)
@@ -15,9 +18,15 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    await events.start()
-    yield
-    await events.stop()
+    db = get_settings().workflow_db_file
+    db.parent.mkdir(parents=True, exist_ok=True)
+    # Durable LangGraph checkpoints: workflows waiting for approval survive restarts.
+    async with AsyncSqliteSaver.from_conn_string(str(db)) as checkpointer:
+        workflows.init(checkpointer)
+        await events.start()
+        events.consume_alerts(workflows.on_alert)
+        yield
+        await events.stop()
 
 
 app = FastAPI(title="SCM AI Service", lifespan=lifespan)
@@ -67,6 +76,52 @@ async def rl_train(req: TrainRequest) -> dict:
 @app.get("/ai/rl/recommendations")
 async def rl_recommendations() -> list[dict]:
     return await rl_service.recommendations()
+
+
+class StartWorkflowRequest(BaseModel):
+    alert: dict
+
+
+class DecisionRequest(BaseModel):
+    approved: bool
+    actions: list[dict] | None = None  # optional edited actions (e.g. a changed quantity)
+    comment: str = ""
+
+
+@app.get("/ai/workflows/exceptions")
+async def list_exception_workflows() -> list[dict]:
+    return await workflows.list_runs()
+
+
+@app.post("/ai/workflows/exceptions")
+async def start_exception_workflow(req: StartWorkflowRequest) -> dict:
+    if not req.alert.get("alertId") or not req.alert.get("type"):
+        raise HTTPException(status_code=400, detail="alert needs alertId and type")
+    return await workflows.start(req.alert)
+
+
+@app.get("/ai/workflows/exceptions/graph", response_class=PlainTextResponse)
+async def exception_workflow_graph() -> str:
+    """The workflow's LangGraph structure as a Mermaid diagram."""
+    return workflows.mermaid()
+
+
+@app.get("/ai/workflows/exceptions/{thread_id}")
+async def get_exception_workflow(thread_id: str) -> dict:
+    run = await workflows.view(thread_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"No workflow {thread_id}")
+    return run
+
+
+@app.post("/ai/workflows/exceptions/{thread_id}/decision")
+async def decide_exception_workflow(thread_id: str, req: DecisionRequest) -> dict:
+    try:
+        return await workflows.decide(thread_id, req.approved, req.actions, req.comment)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"No workflow {thread_id}")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @app.post("/ai/vision/inspect")
