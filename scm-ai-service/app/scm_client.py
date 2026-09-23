@@ -1,4 +1,4 @@
-"""Thin async client for the Spring Boot scm-core-service REST API."""
+"""Thin async client for the supply chain microservices, through the API gateway."""
 from typing import Any
 
 import httpx

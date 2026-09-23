@@ -11,13 +11,17 @@ import { Alert, DashboardSummary, InventoryItem, Shipment } from '../models';
     <h1>Dashboard</h1>
 
     @if (summary(); as s) {
+      @if (s.unavailable.length) {
+        <div class="card error">Some figures are unavailable because these services are not responding:
+          {{ s.unavailable.join(', ') }}.</div>
+      }
       <div class="kpis">
-        <div class="kpi"><div class="label">SKUs</div><div class="value">{{ s.skus }}</div></div>
-        <div class="kpi"><div class="label">Units on hand</div><div class="value">{{ s.unitsOnHand | number }}</div></div>
-        <div class="kpi" [class.bad]="s.lowStockItems > 0"><div class="label">Low-stock positions</div><div class="value">{{ s.lowStockItems }}</div></div>
-        <div class="kpi"><div class="label">Open POs</div><div class="value">{{ s.openOrders }}</div></div>
-        <div class="kpi"><div class="label">In transit</div><div class="value">{{ s.shipmentsInTransit }}</div></div>
-        <div class="kpi" [class.bad]="s.delayedShipments > 0"><div class="label">Delayed shipments</div><div class="value">{{ s.delayedShipments }}</div></div>
+        <div class="kpi"><div class="label">SKUs</div><div class="value">{{ s.skus ?? '—' }}</div></div>
+        <div class="kpi"><div class="label">Units on hand</div><div class="value">{{ s.unitsOnHand === null ? '—' : (s.unitsOnHand | number) }}</div></div>
+        <div class="kpi" [class.bad]="(s.lowStockItems ?? 0) > 0"><div class="label">Low-stock positions</div><div class="value">{{ s.lowStockItems ?? '—' }}</div></div>
+        <div class="kpi"><div class="label">Open POs</div><div class="value">{{ s.openOrders ?? '—' }}</div></div>
+        <div class="kpi"><div class="label">In transit</div><div class="value">{{ s.shipmentsInTransit ?? '—' }}</div></div>
+        <div class="kpi" [class.bad]="(s.delayedShipments ?? 0) > 0"><div class="label">Delayed shipments</div><div class="value">{{ s.delayedShipments ?? '—' }}</div></div>
       </div>
     }
 

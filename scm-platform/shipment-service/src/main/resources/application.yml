@@ -1,0 +1,50 @@
+server:
+  port: ${PORT:8084}
+
+spring:
+  application:
+    name: shipment-service
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:shipments;DB_CLOSE_DELAY=-1}
+    username: ${DB_USER:sa}
+    password: ${DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+    template:
+      observation-enabled: true
+  cloud:
+    circuitbreaker:
+      resilience4j:
+        disable-time-limiter: true
+      bulkhead:
+        resilience4j:
+          enabled: false
+
+scm:
+  services:
+    order-url: ${ORDER_URL:http://localhost:8083}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,circuitbreakers,camelroutes
+  health:
+    circuitbreakers:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  level:
+    org.apache.kafka: WARN

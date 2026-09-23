@@ -37,6 +37,15 @@ def key_for(item: dict) -> str:
     return f'{item["product"]["sku"]}@{item["warehouseCode"]}'
 
 
+def with_catalog_data(items: list[dict]) -> list[dict]:
+    """inventory-service fills product details from catalog events (eventually consistent);
+    a position whose supplier data has not arrived yet cannot be simulated, so skip it for now."""
+    ready = [i for i in items if (i.get("product") or {}).get("supplier")]
+    if len(ready) < len(items):
+        log.warning("Skipping %d positions without catalog data yet", len(items) - len(ready))
+    return ready
+
+
 def _load() -> dict:
     path = get_settings().rl_policy_file
     return json.loads(path.read_text()) if path.exists() else {}
@@ -67,7 +76,7 @@ def train_position(item: dict, iterations: int) -> dict:
 
 async def train_all(iterations: int | None = None, only_missing: bool = False) -> dict:
     iterations = iterations or get_settings().rl_train_iterations
-    items = await scm_client.inventory()
+    items = with_catalog_data(await scm_client.inventory())
     async with _lock:
         policies = _load()
         for item in items:
@@ -80,7 +89,7 @@ async def train_all(iterations: int | None = None, only_missing: bool = False) -
 
 
 async def recommendations() -> list[dict]:
-    items = await scm_client.inventory()
+    items = with_catalog_data(await scm_client.inventory())
     orders = await scm_client.purchase_orders()
     policies = await train_all(only_missing=True)
 

@@ -7,7 +7,24 @@ x-aws-env: &aws-env
   AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
   BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-anthropic.claude-opus-5}
 
+# Shared settings for the Spring Boot microservices (built from scm-platform/Dockerfile).
+x-java-service: &java-service
+  environment: &java-env
+    KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
+    DB_USER: scm
+    DB_PASSWORD: scm
+    JAVA_TOOL_OPTIONS: -Xmx384m
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fs localhost:$${PORT}/actuator/health || exit 1"]
+    interval: 10s
+    retries: 30
+  depends_on:
+    kafka: { condition: service_healthy }
+    postgres: { condition: service_healthy }
+
 services:
+  # ---------------------------------------------------------------- infrastructure
   kafka:
     image: apache/kafka:3.9.1
     ports: ["9094:9094"]
@@ -36,33 +53,88 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
     depends_on: [kafka]
 
+  # One Postgres server, one database per service (see scripts/postgres-init.sql).
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: scm
       POSTGRES_USER: scm
       POSTGRES_PASSWORD: scm
-    volumes: [pgdata:/var/lib/postgresql/data]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U scm"]
       interval: 5s
       retries: 10
 
-  scm-core:
-    build: ./scm-core-service
+  # Distributed tracing: every service exports OpenTelemetry spans (HTTP + Kafka) here.
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    ports: ["16686:16686"]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  # ---------------------------------------------------------------- domain microservices
+  catalog-service:
+    <<: *java-service
+    build: { context: ./scm-platform, args: { SERVICE: catalog-service } }
+    environment:
+      <<: *java-env
+      PORT: 8081
+      DB_URL: jdbc:postgresql://postgres:5432/catalog
+
+  inventory-service:
+    <<: *java-service
+    build: { context: ./scm-platform, args: { SERVICE: inventory-service } }
+    environment:
+      <<: *java-env
+      PORT: 8082
+      DB_URL: jdbc:postgresql://postgres:5432/inventory
+      SCM_FEEDS_INBOX: /data/inbox/supplier-feeds
+    volumes: [./data/inbox:/data/inbox]
+
+  order-service:
+    <<: *java-service
+    build: { context: ./scm-platform, args: { SERVICE: order-service } }
+    environment:
+      <<: *java-env
+      PORT: 8083
+      DB_URL: jdbc:postgresql://postgres:5432/orders
+      CATALOG_URL: http://catalog-service:8081
+
+  shipment-service:
+    <<: *java-service
+    build: { context: ./scm-platform, args: { SERVICE: shipment-service } }
+    environment:
+      <<: *java-env
+      PORT: 8084
+      DB_URL: jdbc:postgresql://postgres:5432/shipments
+      ORDER_URL: http://order-service:8083
+
+  alert-service:
+    <<: *java-service
+    build: { context: ./scm-platform, args: { SERVICE: alert-service } }
+    environment:
+      <<: *java-env
+      PORT: 8085
+
+  api-gateway:
+    <<: *java-service
+    build: { context: ./scm-platform, args: { SERVICE: api-gateway } }
     ports: ["8080:8080"]
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      <<: *java-env
+      PORT: 8080
+      CATALOG_URL: http://catalog-service:8081
+      INVENTORY_URL: http://inventory-service:8082
+      ORDER_URL: http://order-service:8083
+      SHIPMENT_URL: http://shipment-service:8084
+      ALERT_URL: http://alert-service:8085
       SCM_CORS_ORIGINS: http://localhost:4200,http://localhost:8081
-    volumes: [./data/inbox:/data/inbox]
     depends_on:
       kafka: { condition: service_healthy }
-      postgres: { condition: service_healthy }
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fs localhost:8080/actuator/health || exit 1"]
-      interval: 10s
-      retries: 20
 
+  # ---------------------------------------------------------------- stream processing
   flink-jobmanager:
     image: flink:1.20.1-java17
     command: jobmanager
@@ -79,7 +151,7 @@ services:
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 4
 
-  # One-shot: submits the alerting job once Kafka topics exist (created by scm-core).
+  # One-shot: submits the alerting job once the services have created the Kafka topics.
   flink-job-submitter:
     image: flink:1.20.1-java17
     command: ["flink", "run", "-d", "-m", "flink-jobmanager:8081", "/opt/jobs/scm-stream-processor-1.0.0.jar"]
@@ -87,26 +159,27 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
-      scm-core: { condition: service_healthy }
+      inventory-service: { condition: service_healthy }
       flink-taskmanager: { condition: service_started }
     restart: on-failure
 
+  # ---------------------------------------------------------------- AI + UI
   scm-mcp:
     build: ./scm-ai-service
     command: ["python", "-m", "app.mcp_server"]
     ports: ["8001:8001"]
     environment:
       <<: *aws-env
-      SCM_API_URL: http://scm-core:8080
+      SCM_API_URL: http://api-gateway:8080
     volumes: [~/.aws:/root/.aws:ro, ai-data:/app/data]
-    depends_on: [scm-core]
+    depends_on: [api-gateway]
 
   scm-ai:
     build: ./scm-ai-service
     ports: ["8000:8000"]
     environment:
       <<: *aws-env
-      SCM_API_URL: http://scm-core:8080
+      SCM_API_URL: http://api-gateway:8080
       SCM_MCP_URL: http://scm-mcp:8001/mcp
       KAFKA_ENABLED: "true"
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -116,8 +189,8 @@ services:
   scm-ui:
     build: ./scm-ui
     ports: ["8081:80"]
-    depends_on: [scm-core, scm-ai]
+    depends_on: [api-gateway, scm-ai]
 
 volumes:
   pgdata:
-  ai-data:   # FAISS index + trained RL policies, shared by scm-ai and scm-mcp
+  ai-data:   # vector index + trained RL policies, shared by scm-ai and scm-mcp

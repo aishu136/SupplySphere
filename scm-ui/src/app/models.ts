@@ -66,14 +66,16 @@ export interface Alert {
   source: string;
 }
 
+/** Aggregated by the API gateway; a figure is null when the service that owns it is unavailable. */
 export interface DashboardSummary {
-  skus: number;
-  unitsOnHand: number;
-  lowStockItems: number;
-  openOrders: number;
-  shipmentsInTransit: number;
-  delayedShipments: number;
-  recentAlerts: number;
+  skus: number | null;
+  unitsOnHand: number | null;
+  lowStockItems: number | null;
+  openOrders: number | null;
+  shipmentsInTransit: number | null;
+  delayedShipments: number | null;
+  recentAlerts: number | null;
+  unavailable: string[];
 }
 
 export interface ChatReply {

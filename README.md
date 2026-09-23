@@ -2,81 +2,91 @@
 
 [![CI](https://github.com/aishu136/SupplySphere/actions/workflows/ci.yml/badge.svg)](https://github.com/aishu136/SupplySphere/actions/workflows/ci.yml)
 
-An event-driven supply chain control tower. It tracks inventory, purchase orders and shipments, detects
-problems in real time, and gives operators an AI copilot plus computer-vision dock inspection.
+An event-driven supply chain control tower built as domain microservices. It tracks inventory, purchase
+orders and shipments, detects problems in real time, and gives operators an AI copilot, RL-driven
+replenishment and computer-vision dock inspection.
 
 ```
-                         ┌───────────────────────────── Angular UI (scm-ui) ─────────────────────────────┐
-                         │ Dashboard · Inventory · POs · Shipments · RL · AI assistant · Vision          │
-                         └───────────────┬───────────────────────────────────────┬───────────────────────┘
-                                   /api (REST + SSE)                           /ai
-                                         │                                       │
- supplier CSV ──► Apache Camel ──► ┌─────▼──────────────┐    REST     ┌──────────▼───────────────────────┐
- drop folder      (file→csv→split) │ scm-core-service   │◄────────────│ scm-ai-service (Python)          │
-                                   │ Spring Boot + JPA  │             │  LangChain agent → Claude/Bedrock│
-                                   │ system of record   │             │  RAG: Titan embeddings + vectors │
-                                   └──┬──────────▲──────┘             │  Computer vision: YOLO + OpenCV  │
-                          domain events│          │alerts, inspections│  RL replenishment agents         │
-                                       ▼          │ (Camel routes)    └──────┬──────────────▲────────────┘
-                     ┌──────────────── Kafka ─────┴───────────────────────────┘ inspection  │ MCP tools
-                     │ scm.inventory.events  scm.order.events  scm.shipment.events           │ (streamable HTTP)
-                     │ scm.alerts            scm.vision.events                    ┌──────────┴──────────┐
-                     └──────┬──────────────────────▲───────────────────────────── │ MCP server (FastMCP)│
-                            ▼                      │ alerts                       │ 12 supply chain tools│
-                     ┌──────────────────────────────┐                             └─────────────────────┘
-                     │ scm-stream-processor (Flink) │
-                     │ low stock · shipment delay · │
-                     │ demand spike detection       │
-                     └──────────────────────────────┘
+                  ┌──────────────────────────── Angular UI (scm-ui) ────────────────────────────┐
+                  │ Dashboard · Inventory · POs · Shipments · RL · AI assistant · Vision         │
+                  └──────────────┬───────────────────────────────────────────┬─────────────────┘
+                         /api (REST + SSE)                                  /ai
+                                 ▼                                           ▼
+                  ┌──────────────────────────────┐   REST    ┌─────────────────────────────────┐
+                  │ api-gateway (Spring Cloud GW)│◄──────────│ scm-ai-service (Python)          │
+                  │ routing · circuit breakers · │           │  LangChain agent → Claude/Bedrock│
+                  │ fallbacks · dashboard compose│           │  RAG · computer vision · RL      │
+                  └──┬──────┬──────┬──────┬──────┬┘           │  MCP server (12 tools)           │
+                     ▼      ▼      ▼      ▼      ▼            └──────────────┬──────────────────┘
+               ┌────────┐┌─────────┐┌───────┐┌──────────┐┌───────┐           │ vision results
+               │catalog ││inventory││ order ││ shipment ││ alert │           │
+               │service ││ service ││service││ service  ││service│           │
+               └───┬────┘└────┬────┘└───┬───┘└────┬─────┘└───┬───┘           │
+                   │ own DB   │ own DB  │ own DB  │ own DB    │              │
+                   ▼          ▼         ▼         ▼           ▼              ▼
+      ┌──────────────────────────────── Kafka ─────────────────────────────────────────────┐
+      │ scm.catalog.events (compacted)  scm.inventory.events  scm.order.events              │
+      │ scm.shipment.events             scm.alerts            scm.vision.events             │
+      └──────────────────────────────┬───────────────────────▲───────────────────────────────┘
+                                     ▼                       │ alerts
+                     ┌──────────────────────────────────────────┐
+                     │ scm-stream-processor (Flink)             │   Jaeger: traces across
+                     │ low stock · shipment delay · demand spike│   HTTP and Kafka hops
+                     └──────────────────────────────────────────┘
 ```
 
 | Technology | Where | What it does |
 |---|---|---|
-| **Spring Boot 3.5** | `scm-core-service` | REST API, JPA entities (suppliers, products, inventory, POs, shipments), business rules, SSE alert stream |
-| **Apache Camel 4** | `scm-core-service/.../integration` | Supplier stock-feed ingestion (file → CSV → splitter → bean), Kafka consumers for Flink alerts, and a content-based router for vision inspections (damaged vs. clean), with a dead-letter channel |
-| **Kafka** | all | Event backbone. All services share one JSON envelope: `eventId, type, source, entityId, timestamp, data` |
+| **Spring Boot 3.5 microservices** | `scm-platform/*-service` | Five domain services (catalog, inventory, order, shipment, alert), each with its own database and REST API. See [Microservices](#microservices) |
+| **Spring Cloud Gateway** | `scm-platform/api-gateway` | Single entry point: routing, a Resilience4j circuit breaker per downstream with 503 fallbacks, CORS, and a dashboard endpoint that fans out to four services and degrades gracefully |
+| **Apache Camel 4** | `inventory-service`, `shipment-service` | Supplier stock-feed ingestion (file → CSV → splitter), and a content-based router for vision inspections (damaged → DAMAGED + critical alert, clean → notes), with dead-letter channels |
+| **Kafka** | all | Event backbone: domain events, the delivery saga, catalog state transfer and alerts. All events share one JSON envelope: `eventId, type, source, entityId, timestamp, data` |
 | **Apache Flink 1.20** | `scm-stream-processor` | Stateful stream processing: edge-triggered low-stock alerts (keyed state), shipment-ETA timers (processing-time timers), demand spikes (tumbling windows) |
+| **OpenTelemetry + Jaeger** | all Java services | Traces follow a request across the gateway, service-to-service REST calls and Kafka hops |
 | **LangChain 1.x** | `scm-ai-service/app/agent.py` | `create_agent` with Claude on Bedrock (`ChatBedrockConverse`), per-session memory (LangGraph checkpointer) |
 | **MCP** | `scm-ai-service/app/mcp_server.py` | FastMCP server exposing 12 tools (inventory, POs, shipments, suppliers, alerts, policy search, RL replenishment). The agent loads them with `langchain-mcp-adapters`; Claude Desktop, Claude Code or an AgentCore Gateway can use them too |
-| **Tools** | MCP server | Read tools, plus action tools (`create_purchase_order`, `update_shipment_status`) that go through the Spring Boot business rules |
+| **Tools** | MCP server | Read tools, plus action tools (`create_purchase_order`, `update_shipment_status`) that go through the gateway and each service's business rules |
 | **RAG** | `scm-ai-service/app/rag.py` | Supplier contracts and SOPs in `knowledge_base/`, chunked and embedded with Titan v2 into LangChain's vector store (persisted to JSON); answers cite their source file |
 | **AWS Bedrock AgentCore** | `app/agentcore_app.py`, `Dockerfile.agentcore` | The same agent, packaged for AgentCore Runtime (`BedrockAgentCoreApp`, `/invocations`), with session IDs mapped to agent memory threads |
-| **Computer vision** | `scm-ai-service/app/vision.py` | Dock-photo inspection: YOLO object detection and counting (custom damage classes supported), QR code and barcode decoding with OpenCV, optional structured damage review by Claude. Results flow to Kafka, where Camel marks the shipment DAMAGED and raises an alert |
+| **Computer vision** | `scm-ai-service/app/vision.py` | Dock-photo inspection: YOLO object detection and counting (custom damage classes supported), QR code and barcode decoding with OpenCV, optional structured damage review by Claude. Results flow over Kafka to shipment-service's Camel router |
 | **Reinforcement learning agents** | `scm-ai-service/app/rl/` | One policy-search agent (cross-entropy method) per SKU × warehouse learns its reorder point and order quantity in a Gymnasium simulator. Each is benchmarked against the SOP rule on held-out demand and used only where it was cheaper. Exposed in the UI, over REST, and as the MCP tool the copilot uses |
-| **Angular 20** | `scm-ui` | Standalone components, signals, zoneless; live alerts over SSE |
+| **Angular 20** | `scm-ui` | Standalone components, signals, zoneless; live alerts over SSE; shows which services are down if the dashboard is degraded |
 
-## Running locally (no Docker)
+## Microservices
 
-Prerequisites: Java 21, Maven, Node 22, Python 3.11+, and AWS credentials with Bedrock access to Claude
-and Titan Text Embeddings v2 (only needed for the assistant, RAG and Claude vision review).
+| Service | Port | Owns (own database) | Publishes | Consumes |
+|---|---|---|---|---|
+| `catalog-service` | 8081 | suppliers, products | `PRODUCT_UPSERTED` (compacted topic, keyed by SKU) | — |
+| `inventory-service` | 8082 | stock per SKU × warehouse; product read model | `INVENTORY_UPDATED` | catalog events, `ORDER_RECEIVED` |
+| `order-service` | 8083 | purchase orders | `ORDER_CREATED` / `SHIPPED` / `RECEIVED` / … | shipment events |
+| `shipment-service` | 8084 | shipments, inspection notes | `SHIPMENT_*`, damage alerts | vision inspection results |
+| `alert-service` | 8085 | recent alerts (rebuilt from the retained topic) | — | `scm.alerts` (Flink + services) |
+| `api-gateway` | 8080 | — | — | routes `/api/**` to the services above |
 
-The core service runs without Kafka by default: events are logged, and low-stock alerts are raised in-process.
+**Patterns used**
+- **Database per service.** No service reads another's tables, and cross-service references use business keys
+  such as `orderNumber` and `sku`, not foreign keys.
+- **Saga (choreography).** A delivery spans three services with no distributed transaction:
+  `SHIPMENT_DELIVERED` (shipment-service) → order `RECEIVED`, emits `ORDER_RECEIVED` (order-service) →
+  stock increased (inventory-service).
+- **Idempotent consumers.** Kafka delivers at least once. inventory-service records processed event IDs, so a
+  redelivered `ORDER_RECEIVED` never books stock twice. order-service is idempotent by order state.
+- **Publish after commit.** Events are sent to Kafka only after the database transaction commits
+  (`@TransactionalEventListener`), so no service sees an event for a rolled-back change. For delivery
+  guarantees across crashes, the next step would be a transactional outbox.
+- **Event-carried state transfer.** catalog-service publishes products to a compacted topic, and
+  inventory-service keeps a local copy to render product details without a synchronous call.
+- **Synchronous calls where freshness matters.** order-service → catalog-service (a PO captures the current
+  supplier, price and lead time) and shipment-service → order-service (a shipment must reference a real
+  PO). Both are guarded by Resilience4j circuit breakers and timeouts, so an outage returns 503 quickly.
+- **API gateway and composition.** One entry point for the UI and the AI service. The dashboard aggregates
+  four services in parallel and still answers when one is down.
+- **Observability.** OpenTelemetry traces for every hop (HTTP and Kafka) in Jaeger, and health and
+  circuit-breaker state on `/actuator`.
 
-```bash
-# 1. Core service (http://localhost:8080, H2 console at /h2-console)
-cd scm-core-service
-mvn spring-boot:run
+## Running the stack (Docker)
 
-# 2. MCP server (http://localhost:8001/mcp)
-cd scm-ai-service
-python -m venv .venv && .venv\Scripts\activate        # source .venv/bin/activate on macOS/Linux
-pip install -r requirements.txt
-copy .env.example .env                                 # set AWS_REGION / BEDROCK_MODEL_ID
-python -m app.mcp_server
-
-# 3. AI service (http://localhost:8000/docs), in a second terminal
-uvicorn app.main:app --port 8000
-
-# 4. UI (http://localhost:4200, proxies /api and /ai)
-cd scm-ui
-npm install
-npm start
-```
-
-To try the Camel feed route, copy `scm-core-service/samples/supplier-feed-sample.csv` into
-`scm-core-service/data/inbox/supplier-feeds/`. The file is picked up, applied, and moved to `.done/`.
-
-## Running the full stack (Docker)
+The microservices need Kafka and Postgres, so Docker Compose is the way to run the platform:
 
 ```bash
 cd scm-stream-processor && mvn package -DskipTests && cd ..   # builds the Flink job jar
@@ -86,12 +96,35 @@ docker compose up --build
 | URL | Service |
 |---|---|
 | http://localhost:8081 | Angular UI |
-| http://localhost:8080 | Core API |
+| http://localhost:8080 | API gateway (all `/api/**` endpoints) |
 | http://localhost:8000/docs | AI service (OpenAPI) |
+| http://localhost:16686 | Jaeger (distributed traces) |
 | http://localhost:8082 | Flink dashboard |
 | http://localhost:8090 | Kafka UI |
 
-AWS credentials are passed from your environment or `~/.aws`.
+AWS credentials are passed from your environment or `~/.aws`. To try the Camel feed route, copy
+`scm-platform/inventory-service/samples/supplier-feed-sample.csv` into `data/inbox/supplier-feeds/`. The
+file is picked up, applied, and moved to `.done/`.
+
+`scripts/e2e-smoke.sh` checks a running stack end to end: the saga, Flink alerts, gateway fallbacks with a
+service stopped, and traces in Jaeger. CI runs it on every push.
+
+### Developing without Docker
+
+Each service runs with `mvn spring-boot:run` from `scm-platform/<service>` (H2 in-memory database, ports
+8081–8085, gateway on 8080), but it needs a Kafka broker on `localhost:9092`. The AI service and UI run
+as before:
+
+```bash
+cd scm-ai-service
+python -m venv .venv && .venv\Scripts\activate        # source .venv/bin/activate on macOS/Linux
+pip install -r requirements.txt
+copy .env.example .env                                 # set AWS_REGION / BEDROCK_MODEL_ID
+python -m app.mcp_server                               # MCP server on :8001
+uvicorn app.main:app --port 8000                       # AI service, in a second terminal
+
+cd scm-ui && npm install && npm start                  # UI on :4200, proxies /api and /ai
+```
 
 ## Bedrock model
 
@@ -181,7 +214,7 @@ when its position's reorder point, reorder quantity, price or lead time changes.
 ## Try it
 
 - **Dashboard:** the seed data has two low-stock positions and one overdue ocean shipment (`TRK-DEMO000002`).
-- **Inventory:** adjust `SKU-3002 @ WH-EAST` by `-90` and watch a LOW_STOCK alert appear live.
+- **Inventory:** adjust `SKU-3002 @ WH-EAST` by `-90` and watch Flink's LOW_STOCK alert appear live.
 - **RL replenishment:** see where the learned policy beats the SOP rule, then place its PO.
 - **Assistant:** ask *"Which items are below their reorder point, and what does the reorder policy say to do?"*
 - **Vision:** open a shipment's **Inspect** link and upload a photo of the package.
@@ -189,7 +222,7 @@ when its position's reorder point, reorder quantity, price or lead time changes.
 ## Tests
 
 ```bash
-cd scm-core-service && mvn test          # service flows: low stock, PO receipt on delivery, local alerts
+cd scm-platform && mvn verify            # 6 services, 16 tests: saga, idempotency, circuit breakers (embedded Kafka)
 cd scm-ai-service && pytest              # RL env + agent, RAG index (offline), vision, MCP tools, event contract
 cd scm-ui && npx ng build                # strict template type-check
 ```

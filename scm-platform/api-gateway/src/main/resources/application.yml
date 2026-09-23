@@ -1,0 +1,91 @@
+server:
+  port: ${PORT:8080}
+
+scm:
+  services:
+    catalog: ${CATALOG_URL:http://localhost:8081}
+    inventory: ${INVENTORY_URL:http://localhost:8082}
+    orders: ${ORDER_URL:http://localhost:8083}
+    shipments: ${SHIPMENT_URL:http://localhost:8084}
+    alerts: ${ALERT_URL:http://localhost:8085}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          globalcors:
+            cors-configurations:
+              "[/api/**]":
+                allowed-origins: ${SCM_CORS_ORIGINS:http://localhost:4200}
+                allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+                allowed-headers: "*"
+          routes:
+            # Long-lived SSE stream: no circuit breaker (its time limit would cut the stream).
+            - id: alerts-stream
+              uri: ${scm.services.alerts}
+              order: -1
+              predicates:
+                - Path=/api/alerts/stream
+            - id: alerts
+              uri: ${scm.services.alerts}
+              predicates:
+                - Path=/api/alerts/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: alert-service
+                    fallbackUri: forward:/fallback/alert-service
+            - id: catalog
+              uri: ${scm.services.catalog}
+              predicates:
+                - Path=/api/suppliers/**,/api/products/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: catalog-service
+                    fallbackUri: forward:/fallback/catalog-service
+            - id: inventory
+              uri: ${scm.services.inventory}
+              predicates:
+                - Path=/api/inventory/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: inventory-service
+                    fallbackUri: forward:/fallback/inventory-service
+            - id: orders
+              uri: ${scm.services.orders}
+              predicates:
+                - Path=/api/orders/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: order-service
+                    fallbackUri: forward:/fallback/order-service
+            - id: shipments
+              uri: ${scm.services.shipments}
+              predicates:
+                - Path=/api/shipments/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: shipment-service
+                    fallbackUri: forward:/fallback/shipment-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway,circuitbreakers
+  endpoint:
+    gateway:
+      access: read-only
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
