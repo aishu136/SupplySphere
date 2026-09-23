@@ -3,6 +3,9 @@
 # Verifies: event-carried state transfer, the delivery saga across three services, Flink alerting,
 # gateway circuit-breaker fallbacks, dashboard degradation, and distributed tracing in Jaeger.
 set -euo pipefail
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  trap 'echo "::error title=e2e failed at line $LINENO::$BASH_COMMAND"' ERR
+fi
 
 GW="${GATEWAY_URL:-http://localhost:8080}"
 FLINK="${FLINK_URL:-http://localhost:8082}"
@@ -15,7 +18,12 @@ ok() { printf '   ok: %s\n' "$*"; }
 retry() {
   local deadline=$((SECONDS + $1)); shift
   until "$@" >/dev/null 2>&1; do
-    if (( SECONDS >= deadline )); then echo "   FAILED waiting for: $*"; return 1; fi
+    if (( SECONDS >= deadline )); then
+      echo "   FAILED waiting for: $*"
+      # Surfaces in the GitHub checks UI/API; harmless when run locally.
+      [ -n "${GITHUB_ACTIONS:-}" ] && echo "::error title=e2e check failed::$*"
+      return 1
+    fi
     sleep 2
   done
 }

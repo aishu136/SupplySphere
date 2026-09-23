@@ -141,6 +141,11 @@ services:
     ports: ["8082:8081"]
     environment:
       FLINK_PROPERTIES: "jobmanager.rpc.address: flink-jobmanager"
+    healthcheck:
+      # REST API up (the image has bash but not curl).
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8081'"]
+      interval: 5s
+      retries: 30
 
   flink-taskmanager:
     image: flink:1.20.1-java17
@@ -160,6 +165,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       inventory-service: { condition: service_healthy }
+      flink-jobmanager: { condition: service_healthy }
       flink-taskmanager: { condition: service_started }
     restart: on-failure
 
