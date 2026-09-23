@@ -107,8 +107,15 @@ AWS credentials are passed from your environment or `~/.aws`. To try the Camel f
 `scm-platform/inventory-service/samples/supplier-feed-sample.csv` into `data/inbox/supplier-feeds/`. The
 file is picked up, applied, and moved to `.done/`.
 
-`scripts/e2e-smoke.sh` checks a running stack end to end: the saga, Flink alerts, gateway fallbacks with a
-service stopped, and traces in Jaeger. CI runs it on every push.
+`scripts/e2e-smoke.sh` checks a running stack end to end:
+- the saga
+- Flink alerts
+- the LangGraph workflow: a Flink alert starts it over Kafka, it survives an AI-service restart while
+  waiting for approval, and once approved it creates the purchase order
+- gateway fallbacks with a service stopped
+- traces in Jaeger
+
+CI runs it on every push.
 
 ### Developing without Docker
 

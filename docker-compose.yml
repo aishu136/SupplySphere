@@ -190,7 +190,14 @@ services:
       KAFKA_ENABLED: "true"
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     volumes: [~/.aws:/root/.aws:ro, ai-data:/app/data]
-    depends_on: [scm-mcp, kafka]
+    healthcheck:
+      # The slim Python image has no curl.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ai/health')"]
+      interval: 10s
+      retries: 30
+    depends_on:
+      scm-mcp: { condition: service_started }
+      kafka: { condition: service_healthy }
 
   scm-ui:
     build: ./scm-ui

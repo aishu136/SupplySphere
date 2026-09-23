@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end check of the running microservices stack (docker compose), through the API gateway.
 # Verifies: event-carried state transfer, the delivery saga across three services, Flink alerting,
+# the LangGraph exception workflow (Kafka trigger, durable pause for approval, execution),
 # gateway circuit-breaker fallbacks, dashboard degradation, and distributed tracing in Jaeger.
 set -euo pipefail
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
@@ -10,6 +11,7 @@ fi
 GW="${GATEWAY_URL:-http://localhost:8080}"
 FLINK="${FLINK_URL:-http://localhost:8082}"
 JAEGER="${JAEGER_URL:-http://localhost:16686}"
+AI="${AI_URL:-http://localhost:8000}"
 
 step() { printf '\n== %s\n' "$*"; }
 ok() { printf '   ok: %s\n' "$*"; }
@@ -77,6 +79,28 @@ for _ in $(seq 1 12); do
 done
 retry 30 low_stock_alert
 ok "LOW_STOCK alert went Flink -> scm.alerts -> alert-service -> gateway"
+
+step "LangGraph workflow: the Flink alert starts a workflow that pauses for approval"
+pending_workflow() {
+  curl -fsS "$AI/ai/workflows/exceptions" \
+    | jq -e '.[] | select(.alert.type == "LOW_STOCK" and .alert.entityId == "SKU-3002" and .status == "awaiting_approval")'
+}
+retry 300 pending_workflow
+run=$(pending_workflow | jq -s -c 'first')
+thread=$(jq -r .threadId <<<"$run")
+jq -e '.plan.actions | any(.type == "create_purchase_order" and .sku == "SKU-3002" and .quantity > 0)' <<<"$run" >/dev/null
+ok "$thread proposes: $(jq -r '.plan.actions | map("\(.type) \(.sku // .tracking_number) x\(.quantity // .status)") | join(", ")' <<<"$run") (planner: $(jq -r .planner <<<"$run"))"
+
+docker compose restart scm-ai >/dev/null
+retry 180 curl -fsS "$AI/ai/health"
+curl -fsS "$AI/ai/workflows/exceptions/$thread" | jq -e '.status == "awaiting_approval"' >/dev/null
+ok "still awaiting approval after restarting the AI service (durable SQLite checkpoint)"
+
+result=$(json -X POST "$AI/ai/workflows/exceptions/$thread/decision" -d '{"approved": true, "comment": "e2e"}')
+jq -e '.status == "completed"' <<<"$result" >/dev/null
+new_po=$(jq -r '.outcome | capture("(?<po>PO-[A-Z0-9]+)").po' <<<"$result")
+curl -fsS "$GW/api/orders/$new_po" | jq -e '.product.sku == "SKU-3002" and .warehouseCode == "WH-EAST"' >/dev/null
+ok "approved: the workflow created $new_po in order-service through the gateway"
 
 step "Resilience: order-service goes down"
 docker compose stop order-service >/dev/null
