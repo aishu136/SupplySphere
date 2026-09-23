@@ -145,6 +145,21 @@ def test_claude_plan_is_validated_before_approval(calls, monkeypatch):
     assert [a["quantity"] for a in r["plan"]["actions"]] == [64]  # zero-quantity action dropped
 
 
+def test_kafka_trigger_ignores_stale_alerts(calls):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime(2026, 9, 23, 17, 0, tzinfo=timezone.utc)
+    fresh = {**alert("LOW_STOCK", "SKU-3002", "f1"), "timestamp": "2026-09-23T16:55:00.123456789Z"}  # Java Instant
+    old = {**alert("LOW_STOCK", "SKU-3002", "o1"), "timestamp": "2026-09-20T09:00:00Z"}
+    assert not workflows.is_stale(fresh, now)
+    assert workflows.is_stale(old, now)
+    assert not workflows.is_stale(alert("LOW_STOCK", "SKU-3002", "n1"), now)  # no timestamp: treat as fresh
+
+    stale_now = {**old, "timestamp": (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()}
+    run(workflows.on_alert(stale_now))
+    assert run(workflows.list_runs()) == []
+
+
 def test_graph_structure_renders_as_mermaid(calls):
     diagram = workflows.mermaid()
     for node in ("classify", "low_stock_context", "shipment_context", "draft_plan", "human_approval", "execute"):

@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     kafka_alerts_topic: str = "scm.alerts"
 
     workflow_db_file: Path = BASE_DIR / "data" / "workflows.sqlite"
+    # Alerts older than this (e.g. retained history on first deploy) do not start workflows.
+    workflow_max_alert_age_minutes: int = 60
 
     yolo_model: str = "yolo11n.pt"
     vision_confidence: float = 0.35

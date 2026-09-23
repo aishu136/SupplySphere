@@ -1,10 +1,11 @@
 """Runs exception-resolution workflows: start, inspect, list, and resume after human approval."""
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from langgraph.types import Command
 
+from app.config import get_settings
 from app.workflows.exception_graph import SUPPORTED, build_graph
 
 log = logging.getLogger(__name__)
@@ -95,9 +96,26 @@ def mermaid() -> str:
     return graph().get_graph().draw_mermaid()
 
 
+def is_stale(alert: dict, now: datetime | None = None) -> bool:
+    raw = alert.get("timestamp")
+    if not raw:
+        return False
+    try:
+        ts = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    age = (now or datetime.now(timezone.utc)) - ts
+    return age > timedelta(minutes=get_settings().workflow_max_alert_age_minutes)
+
+
 async def on_alert(alert: dict) -> None:
-    """Kafka trigger: start a workflow for every supported alert (parks at human approval)."""
+    """Kafka trigger: start a workflow for every fresh, supported alert (parks at human approval)."""
     if alert.get("type") in SUPPORTED and alert.get("alertId"):
+        if is_stale(alert):
+            log.info("Ignoring stale alert %s from %s", alert["alertId"], alert.get("timestamp"))
+            return
         try:
             run = await start(alert)
             log.info("Workflow %s for %s: %s", run["threadId"], alert["type"], run["status"])

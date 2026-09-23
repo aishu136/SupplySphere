@@ -18,7 +18,11 @@ _consumer_task: asyncio.Task | None = None
 
 def consume_alerts(handler: Callable[[dict], Awaitable[None]]) -> None:
     """Runs handler for every message on scm.alerts in a background task (no-op if Kafka is off).
-    One consumer group for all replicas: each alert is handled once."""
+    One consumer group for all replicas: each alert is handled once.
+
+    Reads from 'earliest' so an alert on a partition this consumer has not been assigned yet (e.g. just
+    added) is not skipped; the handler ignores stale alerts. Metadata refreshes every 30 s so new
+    partitions are picked up quickly."""
     global _consumer_task
     s = get_settings()
     if not s.kafka_enabled:
@@ -26,7 +30,8 @@ def consume_alerts(handler: Callable[[dict], Awaitable[None]]) -> None:
 
     async def run() -> None:
         consumer = AIOKafkaConsumer(s.kafka_alerts_topic, bootstrap_servers=s.kafka_bootstrap_servers,
-                                    group_id="scm-ai-workflows", auto_offset_reset="latest",
+                                    group_id="scm-ai-workflows", auto_offset_reset="earliest",
+                                    metadata_max_age_ms=30_000,
                                     value_deserializer=lambda v: json.loads(v))
         await consumer.start()
         log.info("Consuming %s for exception workflows", s.kafka_alerts_topic)
