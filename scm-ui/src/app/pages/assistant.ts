@@ -6,6 +6,9 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
   tools?: string[];
+  runId?: string;        // LangSmith trace of this reply (feedback target)
+  traced?: boolean;
+  rated?: 'up' | 'down';
 }
 
 @Component({
@@ -17,6 +20,8 @@ interface ChatMessage {
     .user { align-self: flex-end; background: var(--accent); color: var(--accent-text); }
     .assistant { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); }
     .tools { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .rate { display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--muted); }
+    .rate button { padding: 2px 8px; }
     .composer { display: flex; gap: 10px; margin-top: 14px; }
     .composer textarea { flex: 1; resize: vertical; min-height: 44px; }
   `,
@@ -35,6 +40,17 @@ interface ChatMessage {
           <div class="msg" [class]="m.role">
             {{ m.text }}
             @if (m.tools?.length) { <div class="tools">Tools used: {{ m.tools!.join(', ') }}</div> }
+            @if (m.role === 'assistant' && m.traced && m.runId) {
+              <div class="rate">
+                @if (m.rated) {
+                  Thanks, rated {{ m.rated === 'up' ? 'helpful' : 'not helpful' }} in LangSmith.
+                } @else {
+                  Helpful?
+                  <button class="secondary" (click)="rate(m, 'up')" aria-label="Helpful">👍</button>
+                  <button class="secondary" (click)="rate(m, 'down')" aria-label="Not helpful">👎</button>
+                }
+              </div>
+            }
           </div>
         }
         @if (busy()) { <div class="msg assistant muted">Thinking…</div> }
@@ -71,9 +87,24 @@ export class Assistant {
     this.messages.update(m => [...m, { role: 'user', text }]);
     this.busy.set(true);
     this.api.chat(this.sessionId, text).subscribe({
-      next: r => this.messages.update(m => [...m, { role: 'assistant', text: r.reply, tools: r.tools_used }]),
+      next: r => this.messages.update(m => [...m, {
+        role: 'assistant', text: r.reply, tools: r.tools_used, runId: r.run_id, traced: r.traced,
+      }]),
       error: e => { this.error.set(errorMessage(e)); this.busy.set(false); },
       complete: () => this.busy.set(false),
+    });
+  }
+
+  rate(message: ChatMessage, rating: 'up' | 'down') {
+    this.api.chatFeedback(message.runId!, rating === 'up' ? 1 : 0).subscribe({
+      next: r => {
+        if (r.recorded) {
+          this.messages.update(list => list.map(m => m === message ? { ...m, rated: rating } : m));
+        } else {
+          this.error.set('Feedback was not recorded: LangSmith is not configured on the AI service.');
+        }
+      },
+      error: e => this.error.set(errorMessage(e)),
     });
   }
 }

@@ -5,6 +5,7 @@ from typing import Any
 
 from langgraph.types import Command
 
+from app import observability
 from app.config import get_settings
 from app.workflows.exception_graph import SUPPORTED, build_graph
 
@@ -49,8 +50,18 @@ async def view(thread_id: str) -> dict | None:
         "decision": values.get("decision"),
         "results": values.get("results", []),
         "outcome": values.get("outcome"),
+        "planRunId": values.get("plan_run_id"),
         "updatedAt": snapshot.created_at,
     }
+
+
+def _traced(thread_id: str, alert: dict, phase: str) -> dict:
+    """Thread config plus LangSmith labels, so both halves of a workflow (plan, then decision)
+    can be found together by thread_id / alert_id in LangSmith."""
+    return {**_config(thread_id), **observability.run_config(
+        f"exception-workflow:{phase}", ["workflow", alert.get("type", "unknown")],
+        {"thread_id": thread_id, "alert_id": alert.get("alertId"), "alert_type": alert.get("type"),
+         "entity_id": alert.get("entityId")})}
 
 
 async def start(alert: dict) -> dict:
@@ -59,7 +70,7 @@ async def start(alert: dict) -> dict:
     existing = await view(thread_id)
     if existing:
         return existing
-    await graph().ainvoke({"alert": alert}, _config(thread_id))
+    await graph().ainvoke({"alert": alert}, _traced(thread_id, alert, "plan"))
     return await view(thread_id)
 
 
@@ -70,8 +81,24 @@ async def decide(thread_id: str, approved: bool, actions: list[dict] | None = No
     if current["status"] != "awaiting_approval":
         raise ValueError(f"Workflow {thread_id} is {current['status']}, not awaiting approval")
     await graph().ainvoke(Command(resume={"approved": approved, "actions": actions, "comment": comment}),
-                          _config(thread_id))
+                          _traced(thread_id, current["alert"], "decision"))
+    record_decision_feedback(current, approved, actions, comment)
     return await view(thread_id)
+
+
+def record_decision_feedback(run: dict, approved: bool, actions: list[dict] | None, comment: str) -> None:
+    """The human decision is the ground truth for the planner: store it on the draft_plan trace, so
+    LangSmith can report the approval and edit rate per planner (Claude vs rules) over time."""
+    proposed = (run.get("plan") or {}).get("actions", [])
+    edited = approved and actions is not None and _essence(actions) != _essence(proposed)
+    observability.feedback(run.get("planRunId"), "plan_approved", 1.0 if approved else 0.0, comment)
+    if approved:
+        observability.feedback(run.get("planRunId"), "plan_edited", 1.0 if edited else 0.0)
+
+
+def _essence(actions: list[dict]) -> list[tuple]:
+    return [(a.get("type"), a.get("sku"), a.get("warehouse_code"), a.get("quantity"),
+             a.get("tracking_number"), a.get("status")) for a in actions]
 
 
 async def list_runs(limit: int = 50) -> list[dict]:

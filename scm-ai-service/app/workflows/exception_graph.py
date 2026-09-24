@@ -21,7 +21,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from pydantic import BaseModel, Field
 
-from app import rag, scm_client
+from app import observability, rag, scm_client
 from app.llm import get_chat_model
 from app.rl import service as rl_service
 
@@ -60,6 +60,7 @@ class ExceptionState(TypedDict, total=False):
     policies: str
     plan: dict
     planner: str
+    plan_run_id: str | None  # LangSmith run of draft_plan; human approval is recorded against it
     decision: dict
     results: list[dict]
     status: str
@@ -202,7 +203,8 @@ async def draft_plan(state: ExceptionState) -> ExceptionState:
     except Exception as e:
         log.warning("Claude planner unavailable (%s); using rule-based plan", e)
         plan, planner = plan_with_rules(state), "rules"
-    return {"plan": {**plan.model_dump(), "actions": validate(plan.actions)}, "planner": planner}
+    return {"plan": {**plan.model_dump(), "actions": validate(plan.actions)}, "planner": planner,
+            "plan_run_id": observability.current_run_id()}
 
 
 def route_after_plan(state: ExceptionState) -> str:

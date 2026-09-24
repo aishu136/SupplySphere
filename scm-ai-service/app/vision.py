@@ -11,11 +11,12 @@ import base64
 import logging
 from collections import Counter
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
 import cv2
 import numpy as np
 from langchain_core.messages import HumanMessage
+from langsmith import traceable
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
@@ -126,6 +127,21 @@ async def assess_with_llm(data: bytes, mime_type: str) -> LlmAssessment:
     return await model.ainvoke([message])
 
 
+def trace_inputs(inputs: dict) -> dict:
+    """LangSmith view of inspect(): the photo's size, not its bytes."""
+    data = inputs.get("data") or b""
+    return {"image_bytes": len(data), "mime_type": inputs.get("mime_type"), "use_llm": inputs.get("use_llm")}
+
+
+def trace_outputs(result: Any) -> dict:
+    """LangSmith view of the result, without the base64 annotated image."""
+    if isinstance(result, InspectionResult):
+        return result.model_dump(exclude={"annotated_image"})
+    return {"output": str(result)[:500]}
+
+
+@traceable(name="vision_inspection", run_type="chain", tags=["vision"],
+           process_inputs=trace_inputs, process_outputs=trace_outputs)
 async def inspect(data: bytes, mime_type: str = "image/jpeg", use_llm: bool = False) -> InspectionResult:
     image = decode_image(data)
     detections = detect_objects(image)

@@ -7,13 +7,14 @@ from fastapi.responses import PlainTextResponse
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel, Field
 
-from app import agent, events, rag, scm_client, vision
+from app import agent, events, observability, rag, scm_client, vision
 from app.config import get_settings
 from app.rl import service as rl_service
 from app.workflows import service as workflows
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
 log = logging.getLogger(__name__)
+observability.configure()
 
 
 @asynccontextmanager
@@ -44,12 +45,25 @@ class RagRequest(BaseModel):
 @app.get("/ai/health")
 async def health() -> dict:
     s = get_settings()
-    return {"status": "ok", "model": s.bedrock_model_id, "kafka": events.enabled(), "mcp": s.scm_mcp_url}
+    return {"status": "ok", "model": s.bedrock_model_id, "kafka": events.enabled(), "mcp": s.scm_mcp_url,
+            "langsmith": observability.enabled()}
 
 
 @app.post("/ai/chat")
 async def chat(req: ChatRequest) -> dict:
     return await agent.chat(req.session_id, req.message)
+
+
+class ChatFeedbackRequest(BaseModel):
+    run_id: str
+    score: float = Field(ge=0, le=1)  # 1 = helpful, 0 = not helpful
+    comment: str = ""
+
+
+@app.post("/ai/chat/feedback")
+async def chat_feedback(req: ChatFeedbackRequest) -> dict:
+    """Stores the user's rating of an assistant reply on its LangSmith trace."""
+    return {"recorded": observability.feedback(req.run_id, "user_rating", req.score, req.comment)}
 
 
 @app.post("/ai/rag/query")

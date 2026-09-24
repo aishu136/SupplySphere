@@ -1,12 +1,14 @@
 """LangChain agent: Claude on Bedrock + supply chain tools loaded from the MCP server."""
 import asyncio
 import logging
+import uuid
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.memory import InMemorySaver
 
+from app import observability
 from app.config import get_settings
 from app.llm import get_chat_model, message_text
 
@@ -47,11 +49,15 @@ async def get_agent():
         return _agent
 
 
-async def chat(session_id: str, message: str) -> dict:
+async def chat(session_id: str, message: str, runtime: str = "fastapi") -> dict:
     agent = await get_agent()
+    # A known run ID lets the UI attach thumbs-up/down feedback to this turn's LangSmith trace.
+    run_id = uuid.uuid4()
     result = await agent.ainvoke(
         {"messages": [{"role": "user", "content": message}]},
-        config={"configurable": {"thread_id": session_id}},
+        config={"configurable": {"thread_id": session_id},
+                **observability.run_config("supplychain-copilot", ["chat", runtime],
+                                           {"session_id": session_id}, run_id=run_id)},
     )
     messages = result["messages"]
     # Messages produced in this turn are those after the last human message.
@@ -59,4 +65,4 @@ async def chat(session_id: str, message: str) -> dict:
     turn = messages[last_human + 1:]
     tools_used = [m.name for m in turn if isinstance(m, ToolMessage)]
     reply = next((message_text(m) for m in reversed(turn) if isinstance(m, AIMessage)), "")
-    return {"reply": reply, "tools_used": tools_used}
+    return {"reply": reply, "tools_used": tools_used, "run_id": str(run_id), "traced": observability.enabled()}

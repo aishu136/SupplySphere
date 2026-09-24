@@ -11,10 +11,11 @@ from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
-from app import rag, scm_client
+from app import observability, rag, scm_client
 from app.config import get_settings
 from app.rl import service as rl_service
 
+observability.configure()  # policy retrieval and RL calls made through MCP are traced too
 settings = get_settings()
 mcp = FastMCP("scm-supply-chain", host=settings.mcp_host, port=settings.mcp_port)
 

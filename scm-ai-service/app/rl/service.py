@@ -3,6 +3,8 @@ import asyncio
 import json
 import logging
 
+from langsmith import traceable
+
 from app import scm_client
 from app.config import get_settings
 from app.rl.agent import CrossEntropyAgent, ReorderPolicy, evaluate, sop_policy
@@ -74,6 +76,8 @@ def train_position(item: dict, iterations: int) -> dict:
     }
 
 
+@traceable(name="rl_train_agents", run_type="chain", tags=["rl"],
+           process_outputs=lambda policies: {"positions": sorted(policies)})
 async def train_all(iterations: int | None = None, only_missing: bool = False) -> dict:
     iterations = iterations or get_settings().rl_train_iterations
     items = with_catalog_data(await scm_client.inventory())
@@ -88,6 +92,7 @@ async def train_all(iterations: int | None = None, only_missing: bool = False) -
     return policies
 
 
+@traceable(name="rl_replenishment_recommendations", run_type="tool", tags=["rl"])
 async def recommendations() -> list[dict]:
     items = with_catalog_data(await scm_client.inventory())
     orders = await scm_client.purchase_orders()

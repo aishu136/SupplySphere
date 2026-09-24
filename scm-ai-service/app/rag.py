@@ -9,6 +9,7 @@ import logging
 from langchain_core.documents import Document
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langsmith import traceable
 
 from app.config import get_settings
 from app.llm import get_chat_model, get_embeddings, message_text
@@ -66,6 +67,7 @@ async def get_store(rebuild: bool = False) -> InMemoryVectorStore:
         return _store
 
 
+@traceable(name="policy_retrieval", run_type="retriever")
 async def search(query: str, k: int = 4) -> list[Document]:
     store = await get_store()
     return await store.asimilarity_search(query, k=k)
@@ -75,6 +77,7 @@ def format_docs(docs: list[Document]) -> str:
     return "\n\n".join(f"[{d.metadata.get('source', 'unknown')}]\n{d.page_content}" for d in docs)
 
 
+@traceable(name="policy_qa", run_type="chain", tags=["rag"])
 async def answer(question: str) -> dict:
     docs = await search(question)
     reply = await get_chat_model().ainvoke(ANSWER_PROMPT.format(context=format_docs(docs), question=question))

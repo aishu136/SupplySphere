@@ -6,6 +6,10 @@ x-aws-env: &aws-env
   AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
   AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
   BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-anthropic.claude-opus-5}
+  # LangSmith tracing/feedback for the AI services; off unless set in your environment.
+  LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+  LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+  LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-supplysphere}
 
 # Shared settings for the Spring Boot microservices (built from scm-platform/Dockerfile).
 x-java-service: &java-service

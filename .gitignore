@@ -24,3 +24,6 @@ scm-core-service/data/
 .idea/
 .vscode/
 *.iml
+.project
+.classpath
+.settings/

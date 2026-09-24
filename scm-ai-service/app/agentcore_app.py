@@ -11,8 +11,9 @@ Local test:
 """
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
-from app import agent
+from app import agent, observability
 
+observability.configure()
 app = BedrockAgentCoreApp()
 
 
@@ -22,7 +23,7 @@ async def invoke(payload: dict, context) -> dict:
     if not prompt:
         return {"error": "payload must include 'prompt'"}
     session_id = getattr(context, "session_id", None) or payload.get("session_id", "default")
-    return await agent.chat(session_id, prompt)
+    return await agent.chat(session_id, prompt, runtime="agentcore")
 
 
 if __name__ == "__main__":

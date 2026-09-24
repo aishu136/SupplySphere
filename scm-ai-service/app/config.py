@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     vision_confidence: float = 0.35
     damage_labels: str = "damaged,damage,dent,tear,torn,crushed,wet,broken,hole"
 
+    # LangSmith (opt-in). The standard LANGSMITH_* environment variables work too.
+    langsmith_tracing: bool = False
+    langsmith_api_key: str | None = None
+    langsmith_project: str = "supplysphere"
+    langsmith_endpoint: str | None = None
+
     rl_policy_file: Path = BASE_DIR / "data" / "rl_policies.json"
     rl_train_iterations: int = 20
 

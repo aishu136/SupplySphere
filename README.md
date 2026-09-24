@@ -45,6 +45,7 @@ replenishment and computer-vision dock inspection.
 | **OpenTelemetry + Jaeger** | all Java services | Traces follow a request across the gateway, service-to-service REST calls and Kafka hops |
 | **LangChain 1.x** | `scm-ai-service/app/agent.py` | `create_agent` with Claude on Bedrock (`ChatBedrockConverse`), per-session memory (LangGraph checkpointer) |
 | **LangGraph** | `scm-ai-service/app/workflows/` | Exception-resolution workflow as an explicit `StateGraph`: branches by alert type, gathers live context and the RL recommendation, has Claude draft a plan, then pauses (`interrupt`) for human approval before executing. State is checkpointed to SQLite, so pending approvals survive restarts. The chat agent (`create_agent`) also runs on LangGraph, with a LangGraph checkpointer for memory. See [Exception workflows](#exception-workflows-langgraph) |
+| **LangSmith** | `scm-ai-service/app/observability.py`, `evals/` | Tracing of every AI run (chat agent, MCP tool calls, LangGraph workflow, RAG, RL, vision), human feedback on traces (chat ratings, plan approvals), and evaluation of the policy Q&A. Opt-in. See [LangSmith](#langsmith-tracing-feedback-evaluation) |
 | **MCP** | `scm-ai-service/app/mcp_server.py` | FastMCP server exposing 12 tools (inventory, POs, shipments, suppliers, alerts, policy search, RL replenishment). The agent loads them with `langchain-mcp-adapters`; Claude Desktop, Claude Code or an AgentCore Gateway can use them too |
 | **Tools** | MCP server | Read tools, plus action tools (`create_purchase_order`, `update_shipment_status`) that go through the gateway and each service's business rules |
 | **RAG** | `scm-ai-service/app/rag.py` | Supplier contracts and SOPs in `knowledge_base/`, chunked and embedded with Titan v2 into LangChain's vector store (persisted to JSON); answers cite their source file |
@@ -208,6 +209,45 @@ instead of starting a second one.
 | `POST /ai/workflows/exceptions/{id}/decision {"approved": true, "actions": [...], "comment": "..."}` | Approve (optionally with edited actions) or reject |
 | `GET /ai/workflows/exceptions/graph` | The compiled graph as Mermaid |
 
+## LangSmith (tracing, feedback, evaluation)
+
+LangSmith is **opt-in**. With nothing configured, no data leaves the service. To turn it on, set these
+in `scm-ai-service/.env` or the environment (Docker Compose passes them through to `scm-ai`, and
+AgentCore takes them with `agentcore launch --env ...`):
+
+```bash
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_...
+LANGSMITH_PROJECT=supplysphere
+```
+
+Traces contain prompts, retrieved documents and supply chain records. Set `LANGSMITH_HIDE_INPUTS=true`
+and/or `LANGSMITH_HIDE_OUTPUTS=true` to redact them.
+
+### Where it is used
+
+| Feature | What appears in LangSmith | How |
+|---|---|---|
+| **AI assistant** (`app/agent.py`) | One trace per chat turn, named `supplychain-copilot`: every Claude call, and every MCP tool call with its arguments and result. Tagged `chat` + `fastapi` or `agentcore`, with the `session_id` in metadata | Automatic LangChain/LangGraph tracing; `run_config()` sets the name, tags and metadata, and a known `run_id` |
+| **Chat feedback** (`POST /ai/chat/feedback`, 👍/👎 in the UI) | Feedback `user_rating` (1 or 0) on that turn's trace | `Client.create_feedback` with the turn's `run_id` |
+| **Exception workflow** (`app/workflows/`) | `exception-workflow:plan` and `exception-workflow:decision` traces with every LangGraph node: context gathering, retrieval, Claude's structured plan, execution. Filterable by `thread_id`, `alert_id`, `alert_type` | Automatic LangGraph tracing plus `run_config()` metadata |
+| **Plan approval as feedback** | On the `draft_plan` run: `plan_approved` (1/0) with the approver's comment, and `plan_edited` (1/0) when quantities were changed. This gives a measured approval and edit rate for the Claude planner against the rule-based fallback | `draft_plan` records its run ID (`current_run_id()`); `decide()` attaches the human decision to it |
+| **Policy Q&A / RAG** (`app/rag.py`) | `policy_qa` chain, with a `policy_retrieval` retriever run showing the retrieved chunks, then the Claude call | `@traceable(run_type="retriever")` and `@traceable(run_type="chain")` |
+| **RL replenishment** (`app/rl/service.py`) | `rl_replenishment_recommendations` and `rl_train_agents` runs, nested inside the chat or workflow trace that called them | `@traceable(run_type="tool")` |
+| **Vision inspection** (`app/vision.py`) | `vision_inspection` run with the verdict, detections and Claude's assessment. Only the image size is recorded, never the image bytes or the annotated image | `@traceable` with `process_inputs` / `process_outputs` redaction |
+| **MCP server** (`app/mcp_server.py`) | Retrieval and RL calls made when an MCP client uses the tools | `configure()` at startup, so the same decorators apply |
+| **Evaluation** (`evals/policy_qa.py`) | Dataset `supplysphere-policy-qa` (6 questions whose expected facts come from `knowledge_base/`), and an experiment per run scored on `facts_covered`, `cites_source` and `retrieval_hit` | `langsmith.aevaluate` with three code evaluators |
+
+Run the evaluation after changing a prompt, the model or retrieval, and compare the experiments in
+LangSmith:
+
+```bash
+cd scm-ai-service
+python -m evals.policy_qa        # needs LangSmith and AWS Bedrock credentials
+```
+
+`/ai/health` reports `"langsmith": true|false`.
+
 ## Reinforcement learning replenishment
 
 **Problem.** A fixed rule ("order the standard quantity at the reorder point") ignores each item's cost
@@ -278,6 +318,6 @@ when its position's reorder point, reorder quantity, price or lead time changes.
 
 ```bash
 cd scm-platform && mvn verify            # 6 services, 16 tests: saga, idempotency, circuit breakers (embedded Kafka)
-cd scm-ai-service && pytest              # LangGraph workflow, RL, RAG (offline), vision, MCP tools, events
+cd scm-ai-service && pytest              # LangGraph, LangSmith, RL, RAG (offline), vision, MCP tools, events
 cd scm-ui && npx ng build                # strict template type-check
 ```

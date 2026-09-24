@@ -81,6 +81,8 @@ export interface DashboardSummary {
 export interface ChatReply {
   reply: string;
   tools_used: string[];
+  run_id: string;   // LangSmith run ID of this turn
+  traced: boolean;  // true when LangSmith tracing is on
 }
 
 export interface PolicyEvaluation {

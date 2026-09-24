@@ -47,6 +47,11 @@ export class ApiService {
     return this.http.post<ChatReply>('/ai/chat', { session_id: sessionId, message });
   }
 
+  /** Stores a rating of an assistant reply on its LangSmith trace. */
+  chatFeedback(runId: string, score: number, comment = '') {
+    return this.http.post<{ recorded: boolean }>('/ai/chat/feedback', { run_id: runId, score, comment });
+  }
+
   rlRecommendations() {
     return this.http.get<ReplenishmentRecommendation[]>('/ai/rl/recommendations');
   }
