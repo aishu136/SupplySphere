@@ -4,7 +4,9 @@ FROM eclipse-temurin:21-jdk AS build
 ARG SERVICE
 WORKDIR /src
 COPY . .
-RUN --mount=type=cache,target=/root/.gradle \
+# sharing=locked: Gradle's cache locks can't be released across containers, so parallel builds
+# (docker compose up --build) take turns on the shared cache instead of timing out on each other.
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
     ./gradlew --no-daemon -q :${SERVICE}:bootJar \
     && cp ${SERVICE}/build/libs/${SERVICE}-*.jar /app.jar
 
