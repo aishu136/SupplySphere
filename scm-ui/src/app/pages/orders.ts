@@ -20,7 +20,7 @@ import { OrderStatus, Product, PurchaseOrder } from '../models';
         <select name="warehouse" [(ngModel)]="warehouse">
           <option>WH-EAST</option><option>WH-WEST</option>
         </select>
-        <input name="qty" type="number" min="1" [(ngModel)]="quantity" style="width: 100px">
+        <input name="qty" type="number" min="1" [(ngModel)]="quantity" class="w-[100px]">
         <button type="submit" [disabled]="!sku || quantity < 1">Create</button>
       </form>
       @if (error()) { <div class="error">{{ error() }}</div> }

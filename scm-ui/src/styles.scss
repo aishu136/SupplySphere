@@ -1,0 +1,13 @@
+// Design system in Sass. The base and components layers sit below Tailwind's utilities layer
+// (src/tailwind.css), so utilities override them without !important.
+@use "sass:meta";
+@use "styles/theme";
+
+@layer base {
+  @include theme.root;
+  @include meta.load-css("styles/base");
+}
+
+@layer components {
+  @include meta.load-css("styles/components");
+}

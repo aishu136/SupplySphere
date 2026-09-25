@@ -52,7 +52,7 @@ replenishment and computer-vision dock inspection.
 | **AWS Bedrock AgentCore** | `app/agentcore_app.py`, `Dockerfile.agentcore` | The same agent, packaged for AgentCore Runtime (`BedrockAgentCoreApp`, `/invocations`), with session IDs mapped to agent memory threads |
 | **Computer vision** | `scm-ai-service/app/vision.py` | Dock-photo inspection: YOLO object detection and counting (custom damage classes supported), QR code and barcode decoding with OpenCV, optional structured damage review by Claude. Results flow over Kafka to shipment-service's Camel router |
 | **Reinforcement learning agents** | `scm-ai-service/app/rl/` | One policy-search agent (cross-entropy method) per SKU × warehouse learns its reorder point and order quantity in a Gymnasium simulator. Each is benchmarked against the SOP rule on held-out demand and used only where it was cheaper. Exposed in the UI, over REST, and as the MCP tool the copilot uses |
-| **Angular 20** | `scm-ui` | Standalone components, signals, zoneless; live alerts over SSE; shows which services are down if the dashboard is degraded |
+| **Angular 20** | `scm-ui` | Standalone components, signals, zoneless; live alerts over SSE; shows which services are down if the dashboard is degraded. Styled with Sass (theme tokens, components in `src/styles/`) and Tailwind CSS v4 utilities sharing the same tokens |
 
 ## Microservices
 

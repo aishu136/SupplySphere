@@ -9,9 +9,11 @@ import { InspectionResult, Shipment } from '../models';
   imports: [FormsModule, KeyValuePipe, PercentPipe],
   styles: `
     .preview { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
-    .verdict { font-size: 18px; font-weight: 650; margin-bottom: 8px; }
-    .verdict.bad { color: var(--danger); }
-    .verdict.good { color: var(--ok); }
+    .verdict {
+      font-size: 18px; font-weight: 650; margin-bottom: 8px;
+      &.bad { color: var(--danger); }
+      &.good { color: var(--ok); }
+    }
   `,
   template: `
     <h1>Vision inspection</h1>

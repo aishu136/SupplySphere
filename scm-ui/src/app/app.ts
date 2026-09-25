@@ -5,14 +5,15 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
   selector: 'app-root',
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
   template: `
-    <div class="shell">
-      <nav class="sidebar">
-        <div class="brand">SCM Control Tower</div>
+    <div class="grid min-h-screen grid-cols-1 md:grid-cols-[220px_1fr]">
+      <nav class="flex gap-1 overflow-x-auto bg-sidebar px-4 py-2.5 md:flex-col md:px-3 md:py-5">
+        <div class="hidden px-2.5 pb-[18px] text-base font-bold text-white md:block">SCM Control Tower</div>
         @for (item of nav; track item.path) {
-          <a [routerLink]="item.path" routerLinkActive="active">{{ item.label }}</a>
+          <a [routerLink]="item.path" routerLinkActive="bg-accent! text-white!"
+             class="rounded-md px-2.5 py-[9px] whitespace-nowrap text-sidebar-ink no-underline hover:bg-white/6">{{ item.label }}</a>
         }
       </nav>
-      <main class="content">
+      <main class="min-w-0 p-4 md:px-7 md:py-6">
         <router-outlet />
       </main>
     </div>

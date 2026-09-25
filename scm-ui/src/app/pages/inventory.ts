@@ -9,12 +9,12 @@ import { InventoryItem } from '../models';
   template: `
     <h1>Inventory</h1>
     <section class="card">
-      <div class="row" style="margin-bottom: 12px">
-        <input placeholder="Filter by SKU, name or warehouse" [ngModel]="filter()" (ngModelChange)="filter.set($event)" style="min-width: 280px">
+      <div class="row mb-3">
+        <input placeholder="Filter by SKU, name or warehouse" [ngModel]="filter()" (ngModelChange)="filter.set($event)" class="min-w-[280px]">
         <label class="row"><input type="checkbox" [ngModel]="lowOnly()" (ngModelChange)="lowOnly.set($event)"> Low stock only</label>
       </div>
       @if (error()) { <div class="error">{{ error() }}</div> }
-      @if (notice()) { <div class="muted" style="margin-bottom: 8px">{{ notice() }}</div> }
+      @if (notice()) { <div class="muted mb-2">{{ notice() }}</div> }
       <div class="table-wrap"><table>
         <thead><tr>
           <th>SKU</th><th>Product</th><th>Supplier</th><th>Warehouse</th>
@@ -31,7 +31,7 @@ import { InventoryItem } from '../models';
               <td class="num">{{ i.reorderPoint }}</td>
               <td>
                 <div class="row">
-                  <input type="number" #delta value="0" style="width: 80px">
+                  <input type="number" #delta value="0" class="w-20">
                   <button class="secondary" (click)="adjust(i, +delta.value)">Apply</button>
                 </div>
               </td>

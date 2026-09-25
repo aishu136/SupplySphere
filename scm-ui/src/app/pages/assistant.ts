@@ -16,14 +16,20 @@ interface ChatMessage {
   imports: [FormsModule],
   styles: `
     .chat { display: flex; flex-direction: column; gap: 12px; min-height: 360px; max-height: 62vh; overflow-y: auto; }
-    .msg { max-width: 80%; padding: 10px 14px; border-radius: 10px; white-space: pre-wrap; line-height: 1.45; }
-    .user { align-self: flex-end; background: var(--accent); color: var(--accent-text); }
-    .assistant { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); }
+    .msg {
+      max-width: 80%; padding: 10px 14px; border-radius: 10px; white-space: pre-wrap; line-height: 1.45;
+      &.user { align-self: flex-end; background: var(--accent); color: var(--accent-text); }
+      &.assistant { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); }
+    }
     .tools { font-size: 11px; color: var(--muted); margin-top: 6px; }
-    .rate { display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--muted); }
-    .rate button { padding: 2px 8px; }
-    .composer { display: flex; gap: 10px; margin-top: 14px; }
-    .composer textarea { flex: 1; resize: vertical; min-height: 44px; }
+    .rate {
+      display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--muted);
+      button { padding: 2px 8px; }
+    }
+    .composer {
+      display: flex; gap: 10px; margin-top: 14px;
+      textarea { flex: 1; resize: vertical; min-height: 44px; }
+    }
   `,
   template: `
     <h1>AI assistant</h1>

@@ -1,0 +1,21 @@
+/* Tailwind utilities for layout and one-off tweaks; the design system lives in the Sass partials (styles.scss).
+   Preflight is left out on purpose: the app's own base styles in styles/_base.scss define the look. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Utilities share the Sass theme tokens, so bg-surface, text-muted, border-line etc. follow light/dark mode. */
+@theme inline {
+  --color-canvas: var(--bg);
+  --color-surface: var(--surface);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-text);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-ink: var(--sidebar-text);
+}

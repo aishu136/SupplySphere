@@ -1,0 +1,50 @@
+@use "theme";
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+h1 { font-size: 22px; margin: 0 0 18px; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+
+table { width: 100%; border-collapse: collapse; }
+
+th, td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+
+  &.num { text-align: right; font-variant-numeric: tabular-nums; }
+}
+
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+
+tr.low td { background: color-mix(in srgb, var(--danger) 8%, transparent); }
+
+button {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: 0;
+  border-radius: theme.$radius;
+  padding: 7px 12px;
+  font: inherit;
+  cursor: pointer;
+
+  &.secondary { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+  &:disabled { opacity: .5; cursor: default; }
+}
+
+input, select, textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: theme.$radius;
+  padding: 7px 9px;
+}

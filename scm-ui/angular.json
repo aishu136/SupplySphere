@@ -16,7 +16,8 @@
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.json",
             "index": "src/index.html",
-            "styles": ["src/styles.css"],
+            "styles": ["src/tailwind.css", "src/styles.scss"],
+            "inlineStyleLanguage": "scss",
             "outputPath": "dist/scm-ui"
           },
           "configurations": {

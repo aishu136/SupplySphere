@@ -23,7 +23,7 @@ import { Shipment, ShipmentStatus } from '../models';
               <td>{{ s.origin }} → {{ s.destination }}</td>
               <td [class.error]="isLate(s)">{{ s.eta | date: 'MMM d, HH:mm' }}</td>
               <td><span class="badge" [class]="s.status">{{ s.status }}</span></td>
-              <td class="muted" style="white-space: normal; max-width: 260px">{{ s.inspectionNotes ?? '' }}</td>
+              <td class="muted max-w-[260px] whitespace-normal">{{ s.inspectionNotes ?? '' }}</td>
               <td>
                 <select #st [value]="s.status" (change)="setStatus(s, $any(st.value))">
                   @for (option of statuses; track option) { <option [value]="option">{{ option }}</option> }

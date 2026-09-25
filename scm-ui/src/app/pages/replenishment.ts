@@ -15,12 +15,12 @@ import { ReplenishmentRecommendation } from '../models';
 
     <section class="card">
       <form class="row" (ngSubmit)="train()">
-        <label class="row">Training iterations <input name="iterations" type="number" min="5" max="200" [(ngModel)]="iterations" style="width: 90px"></label>
+        <label class="row">Training iterations <input name="iterations" type="number" min="5" max="200" [(ngModel)]="iterations" class="w-[90px]"></label>
         <button type="submit" [disabled]="busy()">{{ busy() ? 'Working…' : 'Retrain agents' }}</button>
         <button type="button" class="secondary" (click)="load()" [disabled]="busy()">Refresh</button>
       </form>
       @if (error()) { <div class="error">{{ error() }}</div> }
-      @if (notice()) { <div class="muted" style="margin-top: 8px">{{ notice() }}</div> }
+      @if (notice()) { <div class="muted mt-2">{{ notice() }}</div> }
     </section>
 
     <section class="card">

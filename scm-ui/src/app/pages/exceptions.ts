@@ -10,10 +10,14 @@ const SUPPORTED = ['LOW_STOCK', 'SHIPMENT_DELAYED'];
   selector: 'app-exceptions',
   imports: [FormsModule, DatePipe, JsonPipe],
   styles: `
-    .run { border-left: 4px solid var(--border); }
-    .run.awaiting_approval { border-left-color: var(--warn); }
-    .run.completed { border-left-color: var(--ok); }
-    .run.rejected, .run.partially_failed { border-left-color: var(--danger); }
+    $status-tones: (awaiting_approval: warn, completed: ok, rejected: danger, partially_failed: danger);
+
+    .run {
+      border-left: 4px solid var(--border);
+      @each $status, $tone in $status-tones {
+        &.#{$status} { border-left-color: var(--#{$tone}); }
+      }
+    }
     .rationale { white-space: pre-wrap; line-height: 1.45; }
     details pre { max-height: 240px; overflow: auto; font-size: 12px; }
   `,
@@ -32,7 +36,7 @@ const SUPPORTED = ['LOW_STOCK', 'SHIPMENT_DELAYED'];
             @for (a of startable(); track a.alertId) {
               <tr>
                 <td><span class="badge" [class]="a.severity">{{ a.type }}</span></td>
-                <td style="white-space: normal">{{ a.message }}</td>
+                <td class="whitespace-normal">{{ a.message }}</td>
                 <td><button class="secondary" (click)="start(a)" [disabled]="busy()">Start workflow</button></td>
               </tr>
             }
@@ -43,7 +47,7 @@ const SUPPORTED = ['LOW_STOCK', 'SHIPMENT_DELAYED'];
 
     @for (r of runs(); track r.threadId) {
       <section class="card run" [class]="r.status">
-        <div class="row" style="justify-content: space-between">
+        <div class="row justify-between">
           <div class="row">
             <span class="badge" [class]="badge(r.status)">{{ r.status.replace('_', ' ') }}</span>
             <strong>{{ r.alert.type }}</strong><span>{{ r.alert.entityId }}</span>
@@ -66,12 +70,12 @@ const SUPPORTED = ['LOW_STOCK', 'SHIPMENT_DELAYED'];
                     <td>{{ a.type === 'create_purchase_order' ? a.sku + ' @ ' + a.warehouse_code : a.tracking_number }}</td>
                     <td class="num">
                       @if (a.type === 'create_purchase_order' && r.status === 'awaiting_approval') {
-                        <input type="number" min="1" [(ngModel)]="a.quantity" style="width: 90px">
+                        <input type="number" min="1" [(ngModel)]="a.quantity" class="w-[90px]">
                       } @else {
                         {{ a.type === 'create_purchase_order' ? a.quantity : a.status }}
                       }
                     </td>
-                    <td style="white-space: normal">{{ a.reason }}</td>
+                    <td class="whitespace-normal">{{ a.reason }}</td>
                   </tr>
                 }
               </tbody>
@@ -80,8 +84,8 @@ const SUPPORTED = ['LOW_STOCK', 'SHIPMENT_DELAYED'];
         }
 
         @if (r.status === 'awaiting_approval') {
-          <div class="row" style="margin-top: 12px">
-            <input placeholder="Comment (optional)" [(ngModel)]="comments[r.threadId]" style="min-width: 280px">
+          <div class="row mt-3">
+            <input placeholder="Comment (optional)" [(ngModel)]="comments[r.threadId]" class="min-w-[280px]">
             <button (click)="decide(r, true)" [disabled]="busy()">Approve and execute</button>
             <button class="secondary" (click)="decide(r, false)" [disabled]="busy()">Reject</button>
           </div>
