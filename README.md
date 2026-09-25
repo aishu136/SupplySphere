@@ -91,7 +91,7 @@ replenishment and computer-vision dock inspection.
 The microservices need Kafka and Postgres, so Docker Compose is the way to run the platform:
 
 ```bash
-cd scm-stream-processor && mvn package -DskipTests && cd ..   # builds the Flink job jar
+(cd scm-stream-processor && ./gradlew shadowJar)   # builds the Flink job jar
 docker compose up --build
 ```
 
@@ -116,11 +116,13 @@ file is picked up, applied, and moved to `.done/`.
 - gateway fallbacks with a service stopped
 - traces in Jaeger
 
-CI runs it on every push.
+CI runs it on every push, in GitHub Actions (`.github/workflows/ci.yml`) and in Jenkins (`Jenkinsfile`).
+The Jenkins pipeline runs the same stages; it needs an agent labelled `docker` with Docker, Compose and
+Buildx, and the Docker Pipeline plugin.
 
 ### Developing without Docker
 
-Each service runs with `mvn spring-boot:run` from `scm-platform/<service>` (H2 in-memory database, ports
+Each service runs with `./gradlew :<service>:bootRun` from `scm-platform` (H2 in-memory database, ports
 8081–8085, gateway on 8080), but it needs a Kafka broker on `localhost:9092`. The AI service and UI run
 as before:
 
@@ -317,7 +319,7 @@ when its position's reorder point, reorder quantity, price or lead time changes.
 ## Tests
 
 ```bash
-cd scm-platform && mvn verify            # 6 services, 16 tests: saga, idempotency, circuit breakers (embedded Kafka)
+cd scm-platform && ./gradlew build        # 6 services, 16 tests: saga, idempotency, circuit breakers (embedded Kafka)
 cd scm-ai-service && pytest              # LangGraph, LangSmith, RL, RAG (offline), vision, MCP tools, events
 cd scm-ui && npx ng build                # strict template type-check
 ```

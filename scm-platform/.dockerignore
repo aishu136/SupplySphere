@@ -1,4 +1,5 @@
-**/target/
+**/build/
+**/.gradle/
 **/data/
 **/*.iml
 .idea/

@@ -26,16 +26,15 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: maven
-          cache-dependency-path: scm-platform/**/pom.xml
+      - uses: gradle/actions/setup-gradle@v5
       - name: Test and package all services (embedded Kafka)
-        run: mvn -B verify
+        run: ./gradlew build
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: platform-surefire-reports
-          path: scm-platform/*/target/surefire-reports/
+          name: platform-test-reports
+          path: scm-platform/*/build/reports/tests/
 
   stream-processor:
     name: Stream processor (Flink)
@@ -49,14 +48,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: maven
-          cache-dependency-path: scm-stream-processor/pom.xml
+      - uses: gradle/actions/setup-gradle@v5
       - name: Build job jar
-        run: mvn -B package
+        run: ./gradlew build
       - uses: actions/upload-artifact@v4
         with:
           name: scm-stream-processor-jar
-          path: scm-stream-processor/target/scm-stream-processor-*.jar
+          path: scm-stream-processor/build/libs/scm-stream-processor-*.jar
           retention-days: 7
 
   ai-service:
@@ -150,10 +148,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: maven
-          cache-dependency-path: scm-stream-processor/pom.xml
+      - uses: gradle/actions/setup-gradle@v5
       - name: Build Flink job jar
-        run: mvn -B -q -f scm-stream-processor/pom.xml package -DskipTests
+        run: scm-stream-processor/gradlew -q -p scm-stream-processor shadowJar
       - name: Start infrastructure and microservices
         run: >
           docker compose up -d --build --wait --wait-timeout 600

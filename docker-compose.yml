@@ -167,7 +167,7 @@ services:
   flink-job-submitter:
     image: flink:1.20.1-java17
     command: ["flink", "run", "-d", "-m", "flink-jobmanager:8081", "/opt/jobs/scm-stream-processor-1.0.0.jar"]
-    volumes: [./scm-stream-processor/target:/opt/jobs:ro]
+    volumes: [./scm-stream-processor/build/libs:/opt/jobs:ro]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:

@@ -1,5 +1,7 @@
 # Java
 target/
+build/
+.gradle/
 *.class
 
 # Python

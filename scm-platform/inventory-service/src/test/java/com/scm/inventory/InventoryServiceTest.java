@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = {
         "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
-        "scm.feeds.inbox=target/test-inbox",
+        "scm.feeds.inbox=build/test-inbox",
         "management.tracing.enabled=false"})
 @EmbeddedKafka(partitions = 1)
 class InventoryServiceTest {
