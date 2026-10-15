@@ -46,6 +46,10 @@ async def update_shipment_status(tracking_number: str, status: str) -> dict:
     return await _request("PATCH", f"/api/shipments/{tracking_number}/status", {"status": status})
 
 
+async def product(sku: str) -> dict:
+    return await _request("GET", f"/api/products/{sku}")
+
+
 async def purchase_orders() -> list[dict]:
     return await _request("GET", "/api/orders")
 

@@ -84,7 +84,7 @@ export class ApiService {
   inspectColdChain(file: File, req: ColdChainRequest) {
     const form = new FormData();
     form.append('file', file);
-    form.append('profile', req.profile);
+    if (req.profile) form.append('profile', req.profile);
     if (req.trackingNumber) form.append('tracking_number', req.trackingNumber);
     form.append('thermal', String(req.thermal));
     if (req.thermal) {

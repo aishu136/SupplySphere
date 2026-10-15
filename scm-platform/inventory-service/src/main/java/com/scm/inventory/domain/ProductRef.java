@@ -2,6 +2,7 @@ package com.scm.inventory.domain;
 
 import com.scm.common.catalog.ProductView;
 import com.scm.common.catalog.SupplierView;
+import com.scm.common.catalog.TemperatureRange;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -25,6 +26,9 @@ public class ProductRef {
     private String supplierCountry;
     private double supplierRating;
     private int leadTimeDays;
+    private String storageProfile;
+    private Double minTempC;
+    private Double maxTempC;
 
     protected ProductRef() {}
 
@@ -46,11 +50,16 @@ public class ProductRef {
             supplierRating = s.rating();
             leadTimeDays = s.leadTimeDays();
         }
+        TemperatureRange range = p.temperatureRange();
+        storageProfile = range == null ? null : range.profile();
+        minTempC = range == null ? null : range.minC();
+        maxTempC = range == null ? null : range.maxC();
     }
 
     public ProductView toView() {
         SupplierView supplier = supplierId == null ? null
                 : new SupplierView(supplierId, supplierName, supplierEmail, supplierCountry, supplierRating, leadTimeDays);
-        return new ProductView(productId, sku, name, category, unitPrice, supplier);
+        TemperatureRange range = storageProfile == null ? null : new TemperatureRange(storageProfile, minTempC, maxTempC);
+        return new ProductView(productId, sku, name, category, unitPrice, supplier, range);
     }
 }

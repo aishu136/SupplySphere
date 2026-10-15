@@ -180,7 +180,7 @@ async def cold_chain_profiles() -> list[dict]:
 @app.post("/ai/vision/cold-chain")
 async def inspect_cold_chain(
     file: UploadFile = File(...),
-    profile: str = Form("chilled"),
+    profile: str | None = Form(None),  # default: the shipment's product range from the catalog
     tracking_number: str | None = Form(None),
     thermal: bool = Form(False),
     scale_min_c: float | None = Form(None),
@@ -189,11 +189,20 @@ async def inspect_cold_chain(
     use_llm: bool = Form(False),
 ) -> dict:
     data = await file.read()
+    source, sku = "request", None
+    if not profile:
+        resolved = await cold_chain.profile_for_shipment(tracking_number) if tracking_number else None
+        if resolved is None:
+            raise HTTPException(status_code=400, detail=(
+                f"Shipment {tracking_number}'s product has no temperature range in the catalog; choose a profile"
+                if tracking_number else "Choose a temperature profile or a shipment"))
+        profile, source, sku = resolved[0], "product", resolved[1]
     try:
         result = await cold_chain.inspect(data, profile, file.content_type or "image/jpeg", thermal,
                                           scale_min_c, scale_max_c, palette, use_llm)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    result.profile_source, result.sku = source, sku
 
     if tracking_number:
         await _report_cold_chain(tracking_number, result)

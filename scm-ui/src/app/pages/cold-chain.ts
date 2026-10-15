@@ -27,6 +27,7 @@ import { ColdChainResult, Shipment, TemperatureProfile } from '../models';
         <div class="row">
           <input type="file" accept="image/*" (change)="pick($event)">
           <select name="profile" [(ngModel)]="profile">
+            <option value="" [disabled]="!trackingNumber">Range of the shipment's product</option>
             @for (p of profiles(); track p.name) {
               <option [value]="p.name">{{ p.name }} · {{ p.min_c }} to {{ p.max_c }} °C</option>
             }
@@ -78,6 +79,8 @@ import { ColdChainResult, Shipment, TemperatureProfile } from '../models';
             @if (r.breach) { <span class="badge" [class]="r.severity === 'critical' ? 'CRITICAL' : 'HIGH'">{{ r.severity }}</span> }
           </div>
           <p>{{ r.summary }}</p>
+          <p class="muted">Range {{ r.profile.min_c }} to {{ r.profile.max_c }} °C
+            {{ r.profile_source === 'product' ? 'from the catalog: ' + r.profile.description : '(' + r.profile.name + ' profile)' }}</p>
 
           @if (r.thermal?.spots?.length) {
             <h2>Hot and cold spots</h2>
@@ -123,7 +126,7 @@ export class ColdChain implements OnInit {
   readonly busy = signal(false);
   readonly error = signal('');
   file: File | null = null;
-  profile = 'chilled';
+  profile = '';  // '' = the shipment's product range from the catalog
   trackingNumber = '';
   thermal = false;
   scaleMinC = -30;
@@ -133,6 +136,7 @@ export class ColdChain implements OnInit {
 
   ngOnInit() {
     this.trackingNumber = this.tracking() ?? '';
+    if (!this.trackingNumber) this.profile = 'chilled';
     this.api.coldChainProfiles().subscribe(p => this.profiles.set(p));
     this.api.shipments().subscribe(s => this.shipments.set(s));
   }

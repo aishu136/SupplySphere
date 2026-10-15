@@ -58,7 +58,7 @@ replenishment and computer-vision dock inspection.
 
 | Service | Port | Owns (own database) | Publishes | Consumes |
 |---|---|---|---|---|
-| `catalog-service` | 8081 | suppliers, products | `PRODUCT_UPSERTED` (compacted topic, keyed by SKU) | — |
+| `catalog-service` | 8081 | suppliers, products (with cold-chain temperature ranges) | `PRODUCT_UPSERTED` (compacted topic, keyed by SKU) | — |
 | `inventory-service` | 8082 | stock per SKU × warehouse; product read model | `INVENTORY_UPDATED` | catalog events, `ORDER_RECEIVED` |
 | `order-service` | 8083 | purchase orders | `ORDER_CREATED` / `SHIPPED` / `RECEIVED` / … | shipment events |
 | `shipment-service` | 8084 | shipments, inspection notes | `SHIPMENT_*`, damage alerts | vision inspection results |
@@ -168,7 +168,23 @@ assessment from Claude.
 ## Cold chain inspection (computer vision)
 
 `app/cold_chain.py` checks frozen and chilled food against a temperature profile: **frozen** -30 to -18 °C,
-**chilled** 0 to 4 °C, **cool** 8 to 15 °C. It accepts two kinds of image:
+**chilled** 0 to 4 °C, **cool** 8 to 15 °C.
+
+**Product temperature ranges.** Each product in the catalog can carry its own `temperatureRange`
+(`{"profile": "FROZEN", "minC": -30, "maxC": -25}`); ambient products have none. The range travels with
+the product on `scm.catalog.events`, so inventory-service's read model has it too. When an inspection is
+for a shipment and no profile is chosen, the range comes from the catalog (shipment → purchase order →
+product), so a product with a tighter limit, such as ice cream at -25 °C, is judged by its own range.
+
+| Endpoint | Purpose |
+|---|---|
+| `PUT /api/products/{sku}/temperature-range {"profile": "CHILLED", "minC": 1}` | Set the range. Limits left out use the profile's defaults |
+| `DELETE /api/products/{sku}/temperature-range` | Make the product ambient again |
+
+The seed catalog includes three cold-chain products from *Nordic Cold Foods*: frozen salmon (`SKU-4001`,
+FROZEN), milk (`SKU-4002`, CHILLED) and ice cream (`SKU-4003`, FROZEN, -30 to -25 °C).
+
+It accepts two kinds of image:
 
 | Image | What is analysed |
 |---|---|
@@ -374,7 +390,7 @@ when its position's reorder point, reorder quantity, price or lead time changes.
 ## Tests
 
 ```bash
-cd scm-platform && ./gradlew build        # 6 services, 16 tests: saga, idempotency, circuit breakers (embedded Kafka)
+cd scm-platform && ./gradlew build        # 6 services, 21 tests: saga, idempotency, circuit breakers (embedded Kafka)
 cd scm-ai-service && pytest              # LangGraph, LangSmith, RL, RAG (offline), vision, MCP tools, events
 cd scm-ui && npx ng build                # strict template type-check
 ```

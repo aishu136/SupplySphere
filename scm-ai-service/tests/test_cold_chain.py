@@ -99,3 +99,60 @@ def test_display_reading_from_llm_is_checked_against_profile(monkeypatch):
     assert result.breach
     assert result.severity == "major"  # 3.5 °C over the 4 °C limit
     assert "display reads 7.5 °C" in result.summary
+
+
+def _stub_catalog(monkeypatch, temperature_range):
+    async def shipment(tn):
+        return {"trackingNumber": tn, "purchaseOrder": {"orderNumber": "PO-FISH01"}}
+
+    async def purchase_orders():
+        return [{"orderNumber": "PO-FISH01", "product": {"sku": "SKU-4003"}}]
+
+    async def product(sku):
+        return {"sku": sku, "name": "Ice cream tubs 4 x 5 L", "temperatureRange": temperature_range}
+
+    for name, fn in (("shipment", shipment), ("purchase_orders", purchase_orders), ("product", product)):
+        monkeypatch.setattr(cold_chain.scm_client, name, fn)
+
+
+def test_shipment_uses_its_products_catalog_range(monkeypatch):
+    _stub_catalog(monkeypatch, {"profile": "FROZEN", "minC": -30, "maxC": -25})
+    profile, sku = asyncio.run(cold_chain.profile_for_shipment("TRK-1"))
+    assert sku == "SKU-4003"
+    assert (profile.name, profile.min_c, profile.max_c) == ("frozen", -30, -25)
+
+    # -22 °C passes the generic frozen profile but breaches this product's tighter limit.
+    frame = _thermal_frame(_level(-22))
+    result = asyncio.run(cold_chain.inspect(_png(frame), profile, thermal=True, scale_min_c=-30, scale_max_c=20))
+    assert result.breach
+    generic = asyncio.run(cold_chain.inspect(_png(frame), "frozen", thermal=True, scale_min_c=-30, scale_max_c=20))
+    assert not generic.breach
+
+
+def test_ambient_product_has_no_range(monkeypatch):
+    _stub_catalog(monkeypatch, None)
+    assert asyncio.run(cold_chain.profile_for_shipment("TRK-1")) is None
+
+
+def test_endpoint_takes_range_from_catalog_or_asks_for_profile(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    image = {"file": ("frame.png", _png(_thermal_frame(_level(-22))), "image/png")}
+    thermal = {"thermal": "true", "scale_min_c": "-30", "scale_max_c": "20"}
+
+    async def no_report(*_):
+        return None
+
+    monkeypatch.setattr("app.main._report_cold_chain", no_report)
+    _stub_catalog(monkeypatch, {"profile": "FROZEN", "minC": -30, "maxC": -25})
+    body = client.post("/ai/vision/cold-chain", data={**thermal, "tracking_number": "TRK-1"}, files=image).json()
+    assert (body["profile_source"], body["sku"], body["profile"]["max_c"], body["breach"]) == \
+           ("product", "SKU-4003", -25, True)
+
+    _stub_catalog(monkeypatch, None)
+    resp = client.post("/ai/vision/cold-chain", data={**thermal, "tracking_number": "TRK-1"}, files=image)
+    assert resp.status_code == 400 and "no temperature range" in resp.json()["detail"]
+    assert client.post("/ai/vision/cold-chain", data=thermal, files=image).status_code == 400

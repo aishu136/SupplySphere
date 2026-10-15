@@ -7,6 +7,12 @@ export interface Supplier {
   leadTimeDays: number;
 }
 
+export interface TemperatureRange {
+  profile: 'FROZEN' | 'CHILLED' | 'COOL';
+  minC: number;
+  maxC: number;
+}
+
 export interface Product {
   id: number;
   sku: string;
@@ -14,6 +20,7 @@ export interface Product {
   category: string;
   unitPrice: number;
   supplier: Supplier;
+  temperatureRange: TemperatureRange | null;
 }
 
 export interface InventoryItem {
@@ -172,6 +179,8 @@ export interface ColdChainResult {
   breach: boolean;
   severity: 'none' | 'minor' | 'major' | 'critical';
   profile: TemperatureProfile;
+  profile_source: 'request' | 'product';
+  sku: string | null;
   summary: string;
   thermal: {
     min_c: number; max_c: number; mean_c: number; p95_c: number;

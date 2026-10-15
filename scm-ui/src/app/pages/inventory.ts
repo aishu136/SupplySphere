@@ -24,7 +24,11 @@ import { InventoryItem } from '../models';
           @for (i of visible(); track i.id) {
             <tr [class.low]="i.lowStock">
               <td>{{ i.product.sku }}</td>
-              <td>{{ i.product.name }}</td>
+              <td>{{ i.product.name }}
+                @if (i.product.temperatureRange; as t) {
+                  <span class="badge IN_TRANSIT" [title]="'Keep between ' + t.minC + ' and ' + t.maxC + ' °C'">{{ t.profile.toLowerCase() }} {{ t.minC }}…{{ t.maxC }} °C</span>
+                }
+              </td>
               <td>{{ i.product.supplier.name }}</td>
               <td>{{ i.warehouseCode }}</td>
               <td class="num">{{ i.quantity }}</td>

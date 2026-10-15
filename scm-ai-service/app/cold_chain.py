@@ -19,7 +19,7 @@ from langchain_core.messages import HumanMessage
 from langsmith import traceable
 from pydantic import BaseModel, Field
 
-from app import vision
+from app import scm_client, vision
 from app.config import get_settings
 from app.llm import get_chat_model
 
@@ -83,12 +83,40 @@ class ColdChainResult(BaseModel):
     breach: bool
     severity: Literal["none", "minor", "major", "critical"]
     profile: TemperatureProfile
+    profile_source: Literal["request", "product"] = "request"
+    sku: str | None = None  # product whose catalog range was used
     summary: str
     thermal: ThermalReport | None = None
     detections: list[vision.Detection] = []
     codes: list[str] = []
     llm_assessment: ColdChainLlmAssessment | None = None
     annotated_image: str | None = None
+
+
+def profile_from_range(product: dict) -> TemperatureProfile | None:
+    """The catalog product's own storage range (null for ambient products) as a profile."""
+    rng = product.get("temperatureRange")
+    if not rng:
+        return None
+    name = str(rng["profile"]).lower()
+    if name not in PROFILES:
+        return None
+    return TemperatureProfile(name=name, min_c=rng["minC"], max_c=rng["maxC"],
+                              description=f"{product.get('name') or product['sku']} ({product['sku']})")
+
+
+async def profile_for_shipment(tracking_number: str) -> tuple[TemperatureProfile, str] | None:
+    """Shipment -> purchase order -> product -> its catalog temperature range."""
+    shipment = await scm_client.shipment(tracking_number)
+    order_number = (shipment.get("purchaseOrder") or {}).get("orderNumber")
+    if not order_number:
+        return None
+    order = next((o for o in await scm_client.purchase_orders() if o["orderNumber"] == order_number), None)
+    if not order:
+        return None
+    sku = order["product"]["sku"]
+    profile = profile_from_range(await scm_client.product(sku))
+    return (profile, sku) if profile else None
 
 
 def cold_chain_labels() -> set[str]:
@@ -204,12 +232,16 @@ def trace_outputs(result) -> dict:
 
 @traceable(name="cold_chain_inspection", run_type="chain", tags=["vision", "cold-chain"],
            process_inputs=trace_inputs, process_outputs=trace_outputs)
-async def inspect(data: bytes, profile: str = "chilled", mime_type: str = "image/jpeg", thermal: bool = False,
+async def inspect(data: bytes, profile: str | TemperatureProfile = "chilled", mime_type: str = "image/jpeg",
+                  thermal: bool = False,
                   scale_min_c: float | None = None, scale_max_c: float | None = None, palette: Palette = "inferno",
                   use_llm: bool = False) -> ColdChainResult:
-    if profile not in PROFILES:
+    if isinstance(profile, TemperatureProfile):
+        prof = profile
+    elif profile in PROFILES:
+        prof = PROFILES[profile]
+    else:
         raise ValueError(f"Unknown temperature profile {profile!r}; use one of {', '.join(PROFILES)}")
-    prof = PROFILES[profile]
     image = vision.decode_image(data)
     parts: list[str] = []
     excursion = 0.0  # worst degrees outside the range, from any source
