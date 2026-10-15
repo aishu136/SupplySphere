@@ -1,8 +1,9 @@
 """Exception-resolution workflow as a LangGraph state machine.
 
-    START -> classify --(LOW_STOCK)--------> low_stock_context --> retrieve_policies -> draft_plan
-                      --(SHIPMENT_DELAYED)-> shipment_context ---^
-                      --(other)------------> finish
+    START -> classify --(LOW_STOCK)---------> low_stock_context ---> retrieve_policies -> draft_plan
+                      --(SHIPMENT_DELAYED)--> shipment_context ----^
+                      --(COLD_CHAIN_BREACH)-> cold_chain_context --^
+                      --(other)-------------> finish
     draft_plan --(actions)--> human_approval --(approved)--> execute -> finish -> END
                --(none)-----> finish        --(rejected)--> finish
 
@@ -15,6 +16,7 @@
 """
 import json
 import logging
+import re
 from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -27,7 +29,7 @@ from app.rl import service as rl_service
 
 log = logging.getLogger(__name__)
 
-SUPPORTED = {"LOW_STOCK": "low_stock", "SHIPMENT_DELAYED": "shipment_delay"}
+SUPPORTED = {"LOW_STOCK": "low_stock", "SHIPMENT_DELAYED": "shipment_delay", "COLD_CHAIN_BREACH": "cold_chain"}
 SHIPMENT_STATUSES = ("CREATED", "IN_TRANSIT", "DELAYED", "DELIVERED", "DAMAGED")
 OPEN_PO_STATUSES = {"CREATED", "APPROVED", "SHIPPED"}
 
@@ -74,7 +76,8 @@ def classify(state: ExceptionState) -> ExceptionState:
 
 
 def route_by_kind(state: ExceptionState) -> str:
-    return {"low_stock": "low_stock_context", "shipment_delay": "shipment_context"}.get(state["kind"], "finish")
+    return {"low_stock": "low_stock_context", "shipment_delay": "shipment_context",
+            "cold_chain": "cold_chain_context"}.get(state["kind"], "finish")
 
 
 async def low_stock_context(state: ExceptionState) -> ExceptionState:
@@ -102,8 +105,9 @@ async def low_stock_context(state: ExceptionState) -> ExceptionState:
     }}
 
 
-async def shipment_context(state: ExceptionState) -> ExceptionState:
-    shipment = await scm_client.shipment(state["alert"]["entityId"])
+async def _shipment_with_order(tracking_number: str) -> dict:
+    """The shipment, its purchase order, and stock of that SKU at each warehouse."""
+    shipment = await scm_client.shipment(tracking_number)
     order_number = (shipment.get("purchaseOrder") or {}).get("orderNumber")
     order, stock = None, []
     if order_number:
@@ -112,18 +116,37 @@ async def shipment_context(state: ExceptionState) -> ExceptionState:
         stock = [{"warehouseCode": p["warehouseCode"], "onHand": p["quantity"], "reorderPoint": p["reorderPoint"],
                   "reorderQuantity": p["reorderQuantity"], "lowStock": p["lowStock"]}
                  for p in await scm_client.inventory(order["product"]["sku"])]
-    return {"context": {
-        "shipment": {k: shipment.get(k) for k in ("trackingNumber", "carrier", "origin", "destination", "status", "eta")},
+    return {
+        "shipment": {k: shipment.get(k) for k in ("trackingNumber", "carrier", "origin", "destination", "status", "eta",
+                                                  "inspectionNotes")},
         "order": None if not order else {"orderNumber": order["orderNumber"], "sku": order["product"]["sku"],
                                          "warehouseCode": order["warehouseCode"], "quantity": order["quantity"],
                                          "supplier": order["supplier"]["name"], "status": order["status"]},
         "destinationStock": stock,
-    }}
+    }
+
+
+async def shipment_context(state: ExceptionState) -> ExceptionState:
+    return {"context": await _shipment_with_order(state["alert"]["entityId"])}
+
+
+def breach_severity(text: str) -> str | None:
+    """Severity from the cold-chain inspection summary ("critical cold-chain breach for frozen goods; ...")."""
+    match = re.search(r"\b(critical|major|minor) cold-chain breach", text or "")
+    return match.group(1) if match else None
+
+
+async def cold_chain_context(state: ExceptionState) -> ExceptionState:
+    context = await _shipment_with_order(state["alert"]["entityId"])
+    context["breachSeverity"] = (breach_severity(context["shipment"].get("inspectionNotes") or "")
+                                 or breach_severity(state["alert"].get("message", "")))
+    return {"context": context}
 
 
 async def retrieve_policies(state: ExceptionState) -> ExceptionState:
     query = {"low_stock": "reorder policy stock-out order quantity supplier lead time",
-             "shipment_delay": "shipment delay escalation expedite late delivery penalties"}[state["kind"]]
+             "shipment_delay": "shipment delay escalation expedite late delivery penalties",
+             "cold_chain": "cold chain temperature breach quarantine reject delivery carrier claim"}[state["kind"]]
     try:
         return {"policies": rag.format_docs(await rag.search(query, k=3))}
     except Exception as e:  # e.g. no AWS credentials for embeddings
@@ -137,8 +160,10 @@ company SOP excerpts below. Use only these action types:
 - create_purchase_order (sku, warehouse_code, quantity)
 - update_shipment_status (tracking_number, status)
 Prefer the RL recommendation's quantity when one is given and its policyUsed is "rl". Do not order for a
-position whose on-hand plus open orders already covers the reorder point. A person approves every action
-before it runs.
+position whose on-hand plus open orders already covers the reorder point. For a cold-chain breach, keep
+the shipment quarantined (DAMAGED), and order a replacement for the purchase order when the SOP says the
+delivery is rejected or the destination warehouse is below its reorder point. A person approves every
+action before it runs.
 
 <alert>{alert}</alert>
 <context>{context}</context>
@@ -169,6 +194,20 @@ def plan_with_rules(state: ExceptionState) -> Plan:
                                       quantity=qty, reason=f"{p['onHand']} on hand vs reorder point {p['reorderPoint']}; "
                                                            f"quantity from {source}"))
         summary = f"{ctx['sku']} is below its reorder point"
+    elif state["kind"] == "cold_chain":
+        shipment, order = ctx["shipment"], ctx.get("order")
+        severity = ctx.get("breachSeverity")
+        if shipment["status"] != "DAMAGED":
+            actions.append(Action(type="update_shipment_status", tracking_number=shipment["trackingNumber"],
+                                  status="DAMAGED", reason="Quarantine goods after a cold-chain breach (SOP-RCV-014)"))
+        destination = next((p for p in ctx.get("destinationStock", [])
+                            if order and p["warehouseCode"] == order["warehouseCode"]), None)
+        if order and (severity == "critical" or (destination and destination["lowStock"])):
+            why = ("Critical breach: the delivery is rejected (SOP-RCV-014)" if severity == "critical"
+                   else "Destination is below its reorder point and the goods are quarantined")
+            actions.append(Action(type="create_purchase_order", sku=order["sku"], warehouse_code=order["warehouseCode"],
+                                  quantity=order["quantity"], reason=f"Replacement for {order['orderNumber']}. {why}"))
+        summary = f"{severity or 'Unknown-severity'} cold-chain breach on shipment {shipment['trackingNumber']}"
     else:
         shipment = ctx["shipment"]
         if shipment["status"] in ("CREATED", "IN_TRANSIT"):
@@ -261,6 +300,7 @@ def build_graph(checkpointer: Any):
     g.add_node("classify", classify)
     g.add_node("low_stock_context", low_stock_context)
     g.add_node("shipment_context", shipment_context)
+    g.add_node("cold_chain_context", cold_chain_context)
     g.add_node("retrieve_policies", retrieve_policies)
     g.add_node("draft_plan", draft_plan)
     g.add_node("human_approval", human_approval)
@@ -268,9 +308,11 @@ def build_graph(checkpointer: Any):
     g.add_node("finish", finish)
 
     g.add_edge(START, "classify")
-    g.add_conditional_edges("classify", route_by_kind, ["low_stock_context", "shipment_context", "finish"])
+    g.add_conditional_edges("classify", route_by_kind,
+                            ["low_stock_context", "shipment_context", "cold_chain_context", "finish"])
     g.add_edge("low_stock_context", "retrieve_policies")
     g.add_edge("shipment_context", "retrieve_policies")
+    g.add_edge("cold_chain_context", "retrieve_policies")
     g.add_edge("retrieve_policies", "draft_plan")
     g.add_conditional_edges("draft_plan", route_after_plan, ["human_approval", "finish"])
     g.add_conditional_edges("human_approval", route_after_approval, ["execute", "finish"])

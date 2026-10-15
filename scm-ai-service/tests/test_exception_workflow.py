@@ -162,5 +162,45 @@ def test_kafka_trigger_ignores_stale_alerts(calls):
 
 def test_graph_structure_renders_as_mermaid(calls):
     diagram = workflows.mermaid()
-    for node in ("classify", "low_stock_context", "shipment_context", "draft_plan", "human_approval", "execute"):
+    for node in ("classify", "low_stock_context", "shipment_context", "cold_chain_context", "draft_plan",
+                 "human_approval", "execute"):
         assert node in diagram
+
+
+def _breached_shipment(monkeypatch, severity):
+    shipment = {**SHIPMENT, "status": "DAMAGED",
+                "inspectionNotes": f"{severity} cold-chain breach for frozen goods; 1 hot spot(s) up to 6.0 °C"}
+
+    async def fake(tn):
+        return shipment
+
+    monkeypatch.setattr(g.scm_client, "shipment", fake)
+
+
+def test_critical_cold_chain_breach_orders_a_replacement(calls, monkeypatch):
+    _breached_shipment(monkeypatch, "critical")
+    r = run(_start_and(alert("COLD_CHAIN_BREACH", "TRK-DEMO000002", "c1")))
+    assert r["kind"] == "cold_chain"
+    assert r["context"]["breachSeverity"] == "critical"
+    assert r["status"] == "awaiting_approval"
+    [action] = r["plan"]["actions"]  # already quarantined by shipment-service, so no status change
+    assert (action["type"], action["sku"], action["warehouse_code"], action["quantity"]) == \
+           ("create_purchase_order", "SKU-3001", "WH-EAST", 300)
+    assert "PO-DEMO0002" in action["reason"]
+
+    r = run(workflows.decide(r["threadId"], True))
+    assert calls == [("po", "SKU-3001", "WH-EAST", 300)]
+    assert r["status"] == "completed"
+
+
+def test_minor_cold_chain_breach_reorders_only_for_low_destination(calls, monkeypatch):
+    _breached_shipment(monkeypatch, "minor")
+    monkeypatch.setitem(INVENTORY, "SKU-3001", [{**INVENTORY["SKU-3001"][0], "quantity": 500, "lowStock": False}])
+    r = run(_start_and(alert("COLD_CHAIN_BREACH", "TRK-DEMO000002", "c2")))
+    assert r["status"] == "no_action"
+    assert calls == []
+
+
+def test_breach_severity_parsing():
+    assert g.breach_severity("major cold-chain breach for chilled goods; display reads 7.5 °C") == "major"
+    assert g.breach_severity("within chilled range (0 to 4 °C)") is None

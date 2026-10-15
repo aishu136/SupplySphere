@@ -128,7 +128,7 @@ export interface ExceptionWorkflow {
   threadId: string;
   status: WorkflowStatus;
   alert: Alert;
-  kind: 'low_stock' | 'shipment_delay' | 'unsupported';
+  kind: 'low_stock' | 'shipment_delay' | 'cold_chain' | 'unsupported';
   context: Record<string, unknown> | null;
   plan: { summary: string; rationale: string; actions: WorkflowAction[] } | null;
   planner: 'claude' | 'rules' | null;

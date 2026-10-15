@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService, errorMessage } from '../api.service';
 import { Alert, ExceptionWorkflow, WorkflowAction } from '../models';
 
-const SUPPORTED = ['LOW_STOCK', 'SHIPMENT_DELAYED'];
+const SUPPORTED = ['LOW_STOCK', 'SHIPMENT_DELAYED', 'COLD_CHAIN_BREACH'];
 
 @Component({
   selector: 'app-exceptions',
@@ -23,9 +23,9 @@ const SUPPORTED = ['LOW_STOCK', 'SHIPMENT_DELAYED'];
   `,
   template: `
     <h1>Exception workflows</h1>
-    <p class="muted">LangGraph workflows resolve LOW_STOCK and SHIPMENT_DELAYED alerts. Each one gathers live context
+    <p class="muted">LangGraph workflows resolve LOW_STOCK, SHIPMENT_DELAYED and COLD_CHAIN_BREACH alerts. Each one gathers live context
       and the RL recommendation, drafts a plan with Claude (or a rule-based plan if Claude is unavailable), then
-      <strong>pauses for your approval</strong> before changing anything. Flink alerts start workflows automatically.</p>
+      <strong>pauses for your approval</strong> before changing anything. Flink and cold-chain alerts start workflows automatically.</p>
     @if (error()) { <div class="error">{{ error() }}</div> }
 
     @if (startable().length) {

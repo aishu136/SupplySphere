@@ -179,7 +179,7 @@ The severity is minor, major or critical, based on how far out of range the temp
 area and the number of signs. The thresholds come from `knowledge_base/cold_chain_sop.md`, which the RAG
 assistant can also cite. A breach on a shipment is published as `COLD_CHAIN_INSPECTED` on
 `scm.vision.events`. shipment-service's Camel router then quarantines the shipment (`DAMAGED`) and raises
-a critical `COLD_CHAIN_BREACH` alert.
+a critical `COLD_CHAIN_BREACH` alert, which starts an [exception workflow](#exception-workflows-langgraph).
 
 | Endpoint | Purpose |
 |---|---|
@@ -192,7 +192,8 @@ exact per-pixel temperatures. In the UI, open **Cold chain**, or the **Cold chai
 
 ## Exception workflows (LangGraph)
 
-When Flink raises a `LOW_STOCK` or `SHIPMENT_DELAYED` alert, the AI service (consuming `scm.alerts`)
+When Flink raises a `LOW_STOCK` or `SHIPMENT_DELAYED` alert, or shipment-service raises a
+`COLD_CHAIN_BREACH`, the AI service (consuming `scm.alerts`)
 starts a LangGraph workflow for it. You can also start one from the **Exception workflows** page.
 
 ```mermaid
@@ -200,9 +201,11 @@ graph TD;
     __start__([start]) --> classify;
     classify -.->|LOW_STOCK| low_stock_context;
     classify -.->|SHIPMENT_DELAYED| shipment_context;
+    classify -.->|COLD_CHAIN_BREACH| cold_chain_context;
     classify -.->|other| finish;
     low_stock_context --> retrieve_policies;
     shipment_context --> retrieve_policies;
+    cold_chain_context --> retrieve_policies;
     retrieve_policies --> draft_plan;
     draft_plan -.->|actions proposed| human_approval;
     draft_plan -.->|nothing to do| finish;
@@ -217,7 +220,8 @@ graph TD;
 | `classify` | Routes by alert type (conditional edges) |
 | `low_stock_context` | Stock per warehouse, open POs, and the RL agent's recommendation for the SKU |
 | `shipment_context` | The shipment, its purchase order, and stock at the destination |
-| `retrieve_policies` | RAG over the SOPs (reorder policy or delay escalation) |
+| `cold_chain_context` | The same, plus the breach severity from the inspection notes. The plan keeps the shipment quarantined (`DAMAGED`) and orders a replacement for the PO when the breach is critical (delivery rejected under SOP-RCV-014) or the destination is below its reorder point |
+| `retrieve_policies` | RAG over the SOPs (reorder policy, delay escalation or cold-chain receiving) |
 | `draft_plan` | Claude produces a structured `Plan` (summary, rationale, actions). If Claude is unreachable, a rule-based plan built from the RL recommendation is used. Actions are allow-listed and validated |
 | `human_approval` | `interrupt()`: the graph stops until a person approves, edits quantities, or rejects |
 | `execute` | Runs the approved actions through the API gateway (create PO, update shipment status) |
