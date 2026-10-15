@@ -190,6 +190,31 @@ The thermal reading is only as accurate as the rendered image: crop out the colo
 and use the camera's fixed (not auto) scale. Where the camera can export radiometric data, use that for
 exact per-pixel temperatures. In the UI, open **Cold chain**, or the **Cold chain** link on a shipment.
 
+## Reefer dock door monitoring (video)
+
+`app/dock_doors.py` times how long reefer dock doors stay open, since every open minute lets warm, humid
+air into the trailer and the cold dock.
+- **How it detects the door state.** You mark the door as a region of the frame. Each sampled frame
+  (`DOCK_DOOR_SAMPLE_FPS`, default 5) is compared with a reference of the closed door: the first frame, or
+  an uploaded still. The door counts as open when at least `DOCK_DOOR_OPEN_FRACTION` of the region has
+  changed.
+- **What is ignored.** A state must hold for `DOCK_DOOR_DEBOUNCE_S` (2 s), so a person or forklift
+  passing by is not an opening. While the door is closed, the reference slowly follows the image, so
+  gradual lighting changes are ignored too.
+- **Recorded clips** (`POST /ai/vision/dock-doors/analyze`, multipart: `file`, `door_id`, `roi_x/y/w/h`
+  as fractions, `max_open_s`, optional `reference` image, `raise_alerts`). It returns every open interval,
+  the total and longest open time, violations over the limit, a per-frame timeline and a frame from the
+  longest opening.
+- **Live cameras** (`POST /ai/vision/dock-doors/monitors {"door_id", "source", "roi", "max_open_s"}`,
+  `GET` to list, `DELETE /{id}` to stop). The stream is read in a background thread with automatic
+  reconnects. Only `rtsp`, `rtsps`, `http` and `https` URLs are accepted, never local paths. When the door
+  stays open past its limit, a `DOCK_DOOR_OPEN` alert is raised, once per opening.
+- **UI.** The **Dock doors** page previews the clip with the door region drawn on it, shows openings on a
+  timeline, and manages live monitors.
+
+Monitors live in the AI service's memory, so restart them after the service restarts. The default limit
+(`DOCK_DOOR_MAX_OPEN_S`, 120 s) follows `knowledge_base/cold_chain_sop.md`.
+
 ## Exception workflows (LangGraph)
 
 When Flink raises a `LOW_STOCK` or `SHIPMENT_DELAYED` alert, or shipment-service raises a

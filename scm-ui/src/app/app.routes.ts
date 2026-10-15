@@ -11,5 +11,6 @@ export const routes: Routes = [
   { path: 'assistant', title: 'AI assistant', loadComponent: () => import('./pages/assistant').then(m => m.Assistant) },
   { path: 'vision', title: 'Vision inspection', loadComponent: () => import('./pages/vision').then(m => m.Vision) },
   { path: 'cold-chain', title: 'Cold chain', loadComponent: () => import('./pages/cold-chain').then(m => m.ColdChain) },
+  { path: 'dock-doors', title: 'Reefer dock doors', loadComponent: () => import('./pages/dock-doors').then(m => m.DockDoors) },
   { path: '**', redirectTo: 'dashboard' },
 ];

@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
-  Alert, ChatReply, ColdChainResult, DashboardSummary, ExceptionWorkflow, InspectionResult, InventoryItem, OrderStatus, Product,
+  Alert, ChatReply, ColdChainResult, DashboardSummary, DockDoorMonitor, DockDoorReport, DoorRoi, ExceptionWorkflow, InspectionResult, InventoryItem, OrderStatus, Product,
   PurchaseOrder, ReplenishmentRecommendation, Shipment, ShipmentStatus, TemperatureProfile, WorkflowAction,
 } from './models';
 
@@ -95,6 +95,25 @@ export class ApiService {
     form.append('use_llm', String(req.useLlm));
     return this.http.post<ColdChainResult>('/ai/vision/cold-chain', form);
   }
+
+  analyzeDockDoor(video: File, doorId: string, roi: DoorRoi, maxOpenS: number, reference: File | null, raiseAlerts: boolean) {
+    const form = new FormData();
+    form.append('file', video);
+    form.append('door_id', doorId);
+    form.append('roi_x', String(roi.x));
+    form.append('roi_y', String(roi.y));
+    form.append('roi_w', String(roi.w));
+    form.append('roi_h', String(roi.h));
+    form.append('max_open_s', String(maxOpenS));
+    if (reference) form.append('reference', reference);
+    form.append('raise_alerts', String(raiseAlerts));
+    return this.http.post<DockDoorReport>('/ai/vision/dock-doors/analyze', form);
+  }
+  dockDoorMonitors() { return this.http.get<DockDoorMonitor[]>('/ai/vision/dock-doors/monitors'); }
+  startDockDoorMonitor(req: { door_id: string; source: string; roi: DoorRoi; max_open_s: number }) {
+    return this.http.post<DockDoorMonitor>('/ai/vision/dock-doors/monitors', req);
+  }
+  stopDockDoorMonitor(id: string) { return this.http.delete<DockDoorMonitor>(`/ai/vision/dock-doors/monitors/${id}`); }
 }
 
 export interface ColdChainRequest {

@@ -187,3 +187,36 @@ export interface ColdChainResult {
   } | null;
   annotated_image: string | null;
 }
+
+export interface DoorRoi { x: number; y: number; w: number; h: number; }
+
+export interface DockDoorReport {
+  door_id: string;
+  duration_s: number;
+  frames_analyzed: number;
+  open_intervals: { start_s: number; end_s: number; duration_s: number; violation: boolean; ongoing: boolean }[];
+  open_count: number;
+  total_open_s: number;
+  longest_open_s: number;
+  open_pct: number;
+  max_open_s: number;
+  violations: number;
+  timeline: [number, number][];
+  keyframe: string | null;
+}
+
+export interface DockDoorMonitor {
+  id: string;
+  doorId: string;
+  source: string;
+  roi: DoorRoi;
+  maxOpenS: number;
+  status: 'starting' | 'running' | 'reconnecting' | 'stopped' | 'failed';
+  doorOpen: boolean;
+  openForS: number;
+  openings: number;
+  alertsRaised: number;
+  changedFraction: number;
+  startedAt: string;
+  error: string | null;
+}

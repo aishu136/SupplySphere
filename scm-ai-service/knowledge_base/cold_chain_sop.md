@@ -13,6 +13,13 @@
    or ice crystals inside packaging (a sign of thawing and refreezing), condensation, leaks and spoilage,
    and reads displays, indicators and use-by dates.
 
+## Reefer dock doors
+1. A reefer dock door may stay open for at most 2 minutes at a time, and only while a trailer is sealed
+   against the dock shelter. Close it between pallet runs.
+2. Every reefer door has a camera. Openings over the limit raise a DOCK_DOOR_OPEN alert to the shift lead.
+3. Three or more over-limit openings at one door in a shift: check the dock shelter seal and the trailer's
+   reefer log, and probe the core temperature of the last pallets received through that door.
+
 ## When a breach is detected
 1. The shipment is marked DAMAGED and a COLD_CHAIN_BREACH alert is raised. Do not receive the goods into
    available stock.

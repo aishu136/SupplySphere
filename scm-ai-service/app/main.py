@@ -1,13 +1,14 @@
 """FastAPI entrypoint for the AI service: agent chat, RAG, RL, LangGraph workflows and vision."""
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
-from app import agent, cold_chain, events, observability, rag, scm_client, vision
+from app import agent, cold_chain, dock_doors, events, observability, rag, scm_client, vision
 from app.config import get_settings
 from app.rl import service as rl_service
 from app.workflows import service as workflows
@@ -27,6 +28,7 @@ async def lifespan(_: FastAPI):
         await events.start()
         events.consume_alerts(workflows.on_alert)
         yield
+        dock_doors.stop_all()
         await events.stop()
 
 
@@ -212,6 +214,53 @@ async def _report_cold_chain(tracking_number: str, result: cold_chain.ColdChainR
         await scm_client.raise_alert("COLD_CHAIN_BREACH", "CRITICAL",
                                      f"Cold-chain inspection of {tracking_number}: {result.summary}",
                                      tracking_number)
+
+
+@app.post("/ai/vision/dock-doors/analyze")
+async def analyze_dock_door_video(
+    file: UploadFile = File(...),
+    door_id: str = Form(...),
+    roi_x: float = Form(...),
+    roi_y: float = Form(...),
+    roi_w: float = Form(...),
+    roi_h: float = Form(...),
+    max_open_s: float | None = Form(None),
+    reference: UploadFile | None = File(None),
+    raise_alerts: bool = Form(False),
+) -> dict:
+    """Times every opening of a reefer dock door in a recorded clip."""
+    try:
+        roi = dock_doors.Roi(x=roi_x, y=roi_y, w=roi_w, h=roi_h)
+        ref = vision.decode_image(await reference.read()) if reference else None
+        suffix = Path(file.filename or "").suffix.lower() or ".mp4"
+        report = await dock_doors.analyze(await file.read(), door_id, roi,
+                                          max_open_s or get_settings().dock_door_max_open_s, ref, suffix,
+                                          raise_alerts)
+    except (ValueError, ValidationError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return report.model_dump()
+
+
+@app.get("/ai/vision/dock-doors/monitors")
+async def list_dock_door_monitors() -> list[dict]:
+    return dock_doors.list_monitors()
+
+
+@app.post("/ai/vision/dock-doors/monitors")
+async def start_dock_door_monitor(req: dock_doors.MonitorRequest) -> dict:
+    """Watches a live camera stream and raises DOCK_DOOR_OPEN when the door stays open too long."""
+    try:
+        return dock_doors.start_monitor(req)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/ai/vision/dock-doors/monitors/{monitor_id}")
+async def stop_dock_door_monitor(monitor_id: str) -> dict:
+    try:
+        return dock_doors.stop_monitor(monitor_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"No monitor {monitor_id}")
 
 
 @app.exception_handler(scm_client.ScmApiError)

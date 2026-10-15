@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     cold_chain_labels: str = "frost,ice,ice_crystals,condensation,thawed,mold,spoiled,leak,swollen"
     thermal_tolerance_c: float = 1.0  # degrees outside the profile before a pixel counts as a spot
     thermal_min_spot_pct: float = 0.5  # spots smaller than this share of the frame are ignored
+    # Reefer dock door monitoring (video).
+    dock_door_max_open_s: float = 120  # default limit before an opening counts as a violation
+    dock_door_pixel_threshold: int = 30  # grey-level change for a door-region pixel to count as changed
+    dock_door_open_fraction: float = 0.35  # share of the door region that must change for "open"
+    dock_door_debounce_s: float = 2.0  # a state must hold this long, so passers-by are ignored
+    dock_door_reference_rate: float = 0.02  # how fast the closed-door reference follows lighting changes
+    dock_door_sample_fps: float = 5.0
+    dock_door_max_upload_mb: int = 200
+    dock_door_reconnect_s: float = 5.0
+    dock_door_max_monitors: int = 16
 
     # LangSmith (opt-in). The standard LANGSMITH_* environment variables work too.
     langsmith_tracing: bool = False

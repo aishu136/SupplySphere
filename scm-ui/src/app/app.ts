@@ -30,5 +30,6 @@ export class App {
     { path: '/assistant', label: 'AI assistant' },
     { path: '/vision', label: 'Vision inspection' },
     { path: '/cold-chain', label: 'Cold chain' },
+    { path: '/dock-doors', label: 'Dock doors' },
   ];
 }
