@@ -29,5 +29,6 @@ export class App {
     { path: '/replenishment', label: 'RL replenishment' },
     { path: '/assistant', label: 'AI assistant' },
     { path: '/vision', label: 'Vision inspection' },
+    { path: '/cold-chain', label: 'Cold chain' },
   ];
 }

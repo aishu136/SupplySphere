@@ -153,3 +153,37 @@ export interface InspectionResult {
   llm_assessment: { damaged: boolean; severity: string; findings: string[]; recommended_action: string } | null;
   annotated_image: string | null;
 }
+
+export interface TemperatureProfile {
+  name: 'frozen' | 'chilled' | 'cool';
+  min_c: number;
+  max_c: number;
+  description: string;
+}
+
+export interface ThermalSpot {
+  kind: 'hot' | 'cold';
+  peak_c: number;
+  area_pct: number;
+  box: number[];
+}
+
+export interface ColdChainResult {
+  breach: boolean;
+  severity: 'none' | 'minor' | 'major' | 'critical';
+  profile: TemperatureProfile;
+  summary: string;
+  thermal: {
+    min_c: number; max_c: number; mean_c: number; p95_c: number;
+    above_range_pct: number; below_range_pct: number; spots: ThermalSpot[];
+  } | null;
+  detections: Detection[];
+  codes: string[];
+  llm_assessment: {
+    displayed_temperatures_c: number[];
+    indicator_status: 'none_visible' | 'ok' | 'triggered' | 'unclear';
+    frost_or_ice: boolean; condensation: boolean; spoilage_signs: boolean;
+    dates_read: string[]; findings: string[]; recommended_action: string;
+  } | null;
+  annotated_image: string | null;
+}

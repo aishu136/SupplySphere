@@ -10,5 +10,6 @@ export const routes: Routes = [
   { path: 'replenishment', title: 'RL replenishment', loadComponent: () => import('./pages/replenishment').then(m => m.Replenishment) },
   { path: 'assistant', title: 'AI assistant', loadComponent: () => import('./pages/assistant').then(m => m.Assistant) },
   { path: 'vision', title: 'Vision inspection', loadComponent: () => import('./pages/vision').then(m => m.Vision) },
+  { path: 'cold-chain', title: 'Cold chain', loadComponent: () => import('./pages/cold-chain').then(m => m.ColdChain) },
   { path: '**', redirectTo: 'dashboard' },
 ];

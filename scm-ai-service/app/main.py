@@ -7,7 +7,7 @@ from fastapi.responses import PlainTextResponse
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel, Field
 
-from app import agent, events, observability, rag, scm_client, vision
+from app import agent, cold_chain, events, observability, rag, scm_client, vision
 from app.config import get_settings
 from app.rl import service as rl_service
 from app.workflows import service as workflows
@@ -167,6 +167,50 @@ async def _report_inspection(tracking_number: str, result: vision.InspectionResu
         await scm_client.update_shipment_status(tracking_number, "DAMAGED")
         await scm_client.raise_alert("SHIPMENT_DAMAGED", "CRITICAL",
                                      f"Vision inspection flagged damage on {tracking_number}: {result.summary}",
+                                     tracking_number)
+
+
+@app.get("/ai/vision/cold-chain/profiles")
+async def cold_chain_profiles() -> list[dict]:
+    return [p.model_dump() for p in cold_chain.PROFILES.values()]
+
+
+@app.post("/ai/vision/cold-chain")
+async def inspect_cold_chain(
+    file: UploadFile = File(...),
+    profile: str = Form("chilled"),
+    tracking_number: str | None = Form(None),
+    thermal: bool = Form(False),
+    scale_min_c: float | None = Form(None),
+    scale_max_c: float | None = Form(None),
+    palette: str = Form("inferno"),
+    use_llm: bool = Form(False),
+) -> dict:
+    data = await file.read()
+    try:
+        result = await cold_chain.inspect(data, profile, file.content_type or "image/jpeg", thermal,
+                                          scale_min_c, scale_max_c, palette, use_llm)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if tracking_number:
+        await _report_cold_chain(tracking_number, result)
+    return result.model_dump()
+
+
+async def _report_cold_chain(tracking_number: str, result: cold_chain.ColdChainResult) -> None:
+    """Same hand-off as dock inspections; a breach quarantines the shipment (status DAMAGED)."""
+    if events.enabled():
+        await events.publish(get_settings().kafka_vision_topic, events.envelope(
+            "COLD_CHAIN_INSPECTED", tracking_number,
+            {"breach": result.breach, "severity": result.severity, "profile": result.profile.name,
+             "summary": result.summary,
+             "maxTempC": result.thermal.max_c if result.thermal else None},
+        ))
+    elif result.breach:
+        await scm_client.update_shipment_status(tracking_number, "DAMAGED")
+        await scm_client.raise_alert("COLD_CHAIN_BREACH", "CRITICAL",
+                                     f"Cold-chain inspection of {tracking_number}: {result.summary}",
                                      tracking_number)
 
 

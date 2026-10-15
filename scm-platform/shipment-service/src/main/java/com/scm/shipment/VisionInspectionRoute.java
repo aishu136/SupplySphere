@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 /**
  * Apache Camel content-based router: consumes computer-vision inspection results published by the
  * AI service and sends damaged shipments down the exception path (status DAMAGED + critical alert).
+ * Cold-chain inspections (thermal or photo) with a temperature breach take the same path, so the
+ * goods are quarantined, with a COLD_CHAIN_BREACH alert instead.
  */
 @Component
 public class VisionInspectionRoute extends RouteBuilder {
@@ -32,17 +34,18 @@ public class VisionInspectionRoute extends RouteBuilder {
 
         Predicate damaged = exchange -> {
             SupplyChainEvent e = exchange.getIn().getBody(SupplyChainEvent.class);
-            return e.data() != null && Boolean.TRUE.equals(e.data().get("damaged"));
+            return e.data() != null
+                    && (Boolean.TRUE.equals(e.data().get("damaged")) || Boolean.TRUE.equals(e.data().get("breach")));
         };
 
         from("kafka:" + Topics.VISION + "?brokers={{spring.kafka.bootstrap-servers}}&groupId=shipment-service"
                 + "&autoOffsetReset=earliest")
                 .routeId("vision-inspections")
                 .unmarshal(new JacksonDataFormat(objectMapper, SupplyChainEvent.class))
-                .filter(simple("${body.type} == 'INSPECTION_COMPLETED'"))
+                .filter(simple("${body.type} in 'INSPECTION_COMPLETED,COLD_CHAIN_INSPECTED'"))
                 .choice()
                     .when(damaged)
-                        .log(LoggingLevel.WARN, "Damage detected on shipment ${body.entityId}")
+                        .log(LoggingLevel.WARN, "${body.type} flagged shipment ${body.entityId}")
                         .bean(shipmentService, "handleDamagedInspection")
                     .otherwise()
                         .bean(shipmentService, "handleCleanInspection")

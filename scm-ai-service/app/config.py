@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     yolo_model: str = "yolo11n.pt"
     vision_confidence: float = 0.35
     damage_labels: str = "damaged,damage,dent,tear,torn,crushed,wet,broken,hole"
+    # Cold chain: detector classes that signal a temperature abuse, and thermal-image thresholds.
+    cold_chain_labels: str = "frost,ice,ice_crystals,condensation,thawed,mold,spoiled,leak,swollen"
+    thermal_tolerance_c: float = 1.0  # degrees outside the profile before a pixel counts as a spot
+    thermal_min_spot_pct: float = 0.5  # spots smaller than this share of the frame are ignored
 
     # LangSmith (opt-in). The standard LANGSMITH_* environment variables work too.
     langsmith_tracing: bool = False

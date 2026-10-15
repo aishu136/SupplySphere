@@ -29,7 +29,7 @@ import { Shipment, ShipmentStatus } from '../models';
                   @for (option of statuses; track option) { <option [value]="option">{{ option }}</option> }
                 </select>
               </td>
-              <td><a [routerLink]="['/vision']" [queryParams]="{ tracking: s.trackingNumber }">Inspect</a></td>
+              <td><a [routerLink]="['/vision']" [queryParams]="{ tracking: s.trackingNumber }">Inspect</a> · <a [routerLink]="['/cold-chain']" [queryParams]="{ tracking: s.trackingNumber }">Cold chain</a></td>
             </tr>
           }
         </tbody>

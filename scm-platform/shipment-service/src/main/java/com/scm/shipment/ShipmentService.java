@@ -74,16 +74,25 @@ public class ShipmentService {
         return ShipmentView.of(s);
     }
 
-    /** Called by the Camel vision route when computer vision flags damage. */
+    /**
+     * Called by the Camel vision route when computer vision flags damage or a cold-chain breach.
+     * Either way the goods are quarantined (DAMAGED), which also closes the shipment's ETA timer in Flink.
+     */
     @Transactional
     public void handleDamagedInspection(SupplyChainEvent inspection) {
+        boolean coldChain = "COLD_CHAIN_INSPECTED".equals(inspection.type());
         Shipment s = find(inspection.entityId());
         s.setStatus(Shipment.Status.DAMAGED);
-        s.setInspectionNotes(String.valueOf(inspection.data().getOrDefault("summary", "Damage detected")));
+        s.setInspectionNotes(String.valueOf(inspection.data().getOrDefault("summary",
+                coldChain ? "Cold-chain breach" : "Damage detected")));
         publish("SHIPMENT_DAMAGED", s);
-        events.publish(Topics.ALERTS, s.getTrackingNumber(), Alert.of(SOURCE, "SHIPMENT_DAMAGED", "CRITICAL",
-                "Vision inspection flagged damage on " + s.getTrackingNumber() + ": " + s.getInspectionNotes(),
-                s.getTrackingNumber()));
+        events.publish(Topics.ALERTS, s.getTrackingNumber(), coldChain
+                ? Alert.of(SOURCE, "COLD_CHAIN_BREACH", "CRITICAL",
+                        "Cold-chain inspection of " + s.getTrackingNumber() + ": " + s.getInspectionNotes(),
+                        s.getTrackingNumber())
+                : Alert.of(SOURCE, "SHIPMENT_DAMAGED", "CRITICAL",
+                        "Vision inspection flagged damage on " + s.getTrackingNumber() + ": " + s.getInspectionNotes(),
+                        s.getTrackingNumber()));
     }
 
     @Transactional

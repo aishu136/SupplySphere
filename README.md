@@ -165,6 +165,31 @@ YOLO model on your dock photos with classes such as `dent`, `tear`, `crushed` an
 then point `YOLO_MODEL` at the weights. Until then, tick **Claude visual review** in the UI to get a damage
 assessment from Claude.
 
+## Cold chain inspection (computer vision)
+
+`app/cold_chain.py` checks frozen and chilled food against a temperature profile: **frozen** -30 to -18 °C,
+**chilled** 0 to 4 °C, **cool** 8 to 15 °C. It accepts two kinds of image:
+
+| Image | What is analysed |
+|---|---|
+| **Thermal camera frame** (reefer trailer, cold room, pallet) | Each pixel's colour is mapped back to a temperature using the camera's palette (ironbow/inferno, white-hot grayscale, jet, turbo) and the scale on its colour bar. Regions more than `THERMAL_TOLERANCE_C` outside the range that cover at least `THERMAL_MIN_SPOT_PCT` of the frame become **hot spots** (door-seal leaks, failed evaporator fans, pallets left on the dock) or **cold spots** (freezing injury to chilled goods). Reports min, max, mean, p95 and % of the frame out of range |
+| **Ordinary photo** | YOLO classes from `COLD_CHAIN_LABELS` (`frost`, `ice`, `condensation`, `thawed`, `mold`...), label decoding, and an optional Claude review that reads thermometer, data-logger and reefer displays, time-temperature indicator labels and use-by dates. The code compares displayed temperatures with the profile; the model doesn't |
+
+The severity is minor, major or critical, based on how far out of range the temperature is, the hot-spot
+area and the number of signs. The thresholds come from `knowledge_base/cold_chain_sop.md`, which the RAG
+assistant can also cite. A breach on a shipment is published as `COLD_CHAIN_INSPECTED` on
+`scm.vision.events`. shipment-service's Camel router then quarantines the shipment (`DAMAGED`) and raises
+a critical `COLD_CHAIN_BREACH` alert.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /ai/vision/cold-chain/profiles` | Temperature profiles |
+| `POST /ai/vision/cold-chain` (multipart: `file`, `profile`, `tracking_number`, `thermal`, `scale_min_c`, `scale_max_c`, `palette`, `use_llm`) | Inspect a photo or thermal frame |
+
+The thermal reading is only as accurate as the rendered image: crop out the colour bar and on-screen text,
+and use the camera's fixed (not auto) scale. Where the camera can export radiometric data, use that for
+exact per-pixel temperatures. In the UI, open **Cold chain**, or the **Cold chain** link on a shipment.
+
 ## Exception workflows (LangGraph)
 
 When Flink raises a `LOW_STOCK` or `SHIPMENT_DELAYED` alert, the AI service (consuming `scm.alerts`)
@@ -315,6 +340,7 @@ when its position's reorder point, reorder quantity, price or lead time changes.
 - **RL replenishment:** see where the learned policy beats the SOP rule, then place its PO.
 - **Assistant:** ask *"Which items are below their reorder point, and what does the reorder policy say to do?"*
 - **Vision:** open a shipment's **Inspect** link and upload a photo of the package.
+- **Cold chain:** open a shipment's **Cold chain** link, tick *Thermal image* and upload a thermal frame of a reefer load.
 
 ## Tests
 

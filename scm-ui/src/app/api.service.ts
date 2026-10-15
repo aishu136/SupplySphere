@@ -2,8 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
-  Alert, ChatReply, DashboardSummary, ExceptionWorkflow, InspectionResult, InventoryItem, OrderStatus, Product,
-  PurchaseOrder, ReplenishmentRecommendation, Shipment, ShipmentStatus, WorkflowAction,
+  Alert, ChatReply, ColdChainResult, DashboardSummary, ExceptionWorkflow, InspectionResult, InventoryItem, OrderStatus, Product,
+  PurchaseOrder, ReplenishmentRecommendation, Shipment, ShipmentStatus, TemperatureProfile, WorkflowAction,
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -79,6 +79,32 @@ export class ApiService {
     form.append('use_llm', String(useLlm));
     return this.http.post<InspectionResult>('/ai/vision/inspect', form);
   }
+
+  coldChainProfiles() { return this.http.get<TemperatureProfile[]>('/ai/vision/cold-chain/profiles'); }
+  inspectColdChain(file: File, req: ColdChainRequest) {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('profile', req.profile);
+    if (req.trackingNumber) form.append('tracking_number', req.trackingNumber);
+    form.append('thermal', String(req.thermal));
+    if (req.thermal) {
+      form.append('scale_min_c', String(req.scaleMinC));
+      form.append('scale_max_c', String(req.scaleMaxC));
+      form.append('palette', req.palette);
+    }
+    form.append('use_llm', String(req.useLlm));
+    return this.http.post<ColdChainResult>('/ai/vision/cold-chain', form);
+  }
+}
+
+export interface ColdChainRequest {
+  profile: string;
+  trackingNumber: string | null;
+  thermal: boolean;
+  scaleMinC: number;
+  scaleMaxC: number;
+  palette: string;
+  useLlm: boolean;
 }
 
 export function errorMessage(err: any): string {
