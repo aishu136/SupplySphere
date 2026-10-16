@@ -184,6 +184,7 @@ services:
     environment:
       <<: *aws-env
       SCM_API_URL: http://api-gateway:8080
+      SCM_AI_URL: http://scm-ai:8000
     volumes: [~/.aws:/root/.aws:ro, ai-data:/app/data]
     depends_on: [api-gateway]
 

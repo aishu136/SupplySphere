@@ -52,7 +52,11 @@ def calls(monkeypatch):
     async def no_claude(_state):
         raise RuntimeError("Bedrock unreachable")
 
+    async def product(sku):
+        return {"sku": sku, "temperatureRange": {"profile": "FROZEN", "minC": -30, "maxC": -18}}
+
     for name, fn in [("inventory", inventory), ("purchase_orders", purchase_orders), ("shipment", shipment),
+                     ("product", product),
                      ("create_purchase_order", create_purchase_order),
                      ("update_shipment_status", update_shipment_status)]:
         monkeypatch.setattr(g.scm_client, name, fn)
@@ -182,6 +186,7 @@ def test_critical_cold_chain_breach_orders_a_replacement(calls, monkeypatch):
     r = run(_start_and(alert("COLD_CHAIN_BREACH", "TRK-DEMO000002", "c1")))
     assert r["kind"] == "cold_chain"
     assert r["context"]["breachSeverity"] == "critical"
+    assert r["context"]["productTemperatureRange"]["maxC"] == -18
     assert r["status"] == "awaiting_approval"
     [action] = r["plan"]["actions"]  # already quarantined by shipment-service, so no status change
     assert (action["type"], action["sku"], action["warehouse_code"], action["quantity"]) == \

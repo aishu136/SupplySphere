@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     scm_api_url: str = "http://localhost:8080"
     scm_mcp_url: str = "http://localhost:8001/mcp"
+    # This AI service, as seen from the MCP server (which runs as its own process), for dock door monitors.
+    scm_ai_url: str = "http://localhost:8000"
     mcp_host: str = "0.0.0.0"
     mcp_port: int = 8001
 

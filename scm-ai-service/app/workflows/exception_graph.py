@@ -140,6 +140,10 @@ async def cold_chain_context(state: ExceptionState) -> ExceptionState:
     context = await _shipment_with_order(state["alert"]["entityId"])
     context["breachSeverity"] = (breach_severity(context["shipment"].get("inspectionNotes") or "")
                                  or breach_severity(state["alert"].get("message", "")))
+    # The limit the goods are judged against, so the plan can cite it.
+    order = context.get("order")
+    context["productTemperatureRange"] = (
+        (await scm_client.product(order["sku"])).get("temperatureRange") if order else None)
     return {"context": context}
 
 

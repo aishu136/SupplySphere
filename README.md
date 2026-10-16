@@ -16,7 +16,7 @@ replenishment and computer-vision dock inspection.
                   │ api-gateway (Spring Cloud GW)│◄──────────│ scm-ai-service (Python)          │
                   │ routing · circuit breakers · │           │  LangChain agent → Claude/Bedrock│
                   │ fallbacks · dashboard compose│           │  LangGraph · RAG · vision · RL   │
-                  └──┬──────┬──────┬──────┬──────┬┘           │  MCP server (12 tools)           │
+                  └──┬──────┬──────┬──────┬──────┬┘           │  MCP server (16 tools)           │
                      ▼      ▼      ▼      ▼      ▼            └──────────────┬──────────────────┘
                ┌────────┐┌─────────┐┌───────┐┌──────────┐┌───────┐           │ vision results
                │catalog ││inventory││ order ││ shipment ││ alert │           │
@@ -46,7 +46,7 @@ replenishment and computer-vision dock inspection.
 | **LangChain 1.x** | `scm-ai-service/app/agent.py` | `create_agent` with Claude on Bedrock (`ChatBedrockConverse`), per-session memory (LangGraph checkpointer) |
 | **LangGraph** | `scm-ai-service/app/workflows/` | Exception-resolution workflow as an explicit `StateGraph`: branches by alert type, gathers live context and the RL recommendation, has Claude draft a plan, then pauses (`interrupt`) for human approval before executing. State is checkpointed to SQLite, so pending approvals survive restarts. The chat agent (`create_agent`) also runs on LangGraph, with a LangGraph checkpointer for memory. See [Exception workflows](#exception-workflows-langgraph) |
 | **LangSmith** | `scm-ai-service/app/observability.py`, `evals/` | Tracing of every AI run (chat agent, MCP tool calls, LangGraph workflow, RAG, RL, vision), human feedback on traces (chat ratings, plan approvals), and evaluation of the policy Q&A. Opt-in. See [LangSmith](#langsmith-tracing-feedback-evaluation) |
-| **MCP** | `scm-ai-service/app/mcp_server.py` | FastMCP server exposing 12 tools (inventory, POs, shipments, suppliers, alerts, policy search, RL replenishment). The agent loads them with `langchain-mcp-adapters`; Claude Desktop, Claude Code or an AgentCore Gateway can use them too |
+| **MCP** | `scm-ai-service/app/mcp_server.py` | FastMCP server exposing 16 tools (inventory, POs, shipments, suppliers, alerts, policy search, RL replenishment, and cold chain: product temperature ranges, reefer shipment status, dock door monitors). The agent loads them with `langchain-mcp-adapters`; Claude Desktop, Claude Code or an AgentCore Gateway can use them too |
 | **Tools** | MCP server | Read tools, plus action tools (`create_purchase_order`, `update_shipment_status`) that go through the gateway and each service's business rules |
 | **RAG** | `scm-ai-service/app/rag.py` | Supplier contracts and SOPs in `knowledge_base/`, chunked and embedded with Titan v2 into LangChain's vector store (persisted to JSON); answers cite their source file |
 | **AWS Bedrock AgentCore** | `app/agentcore_app.py`, `Dockerfile.agentcore` | The same agent, packaged for AgentCore Runtime (`BedrockAgentCoreApp`, `/invocations`), with session IDs mapped to agent memory threads |

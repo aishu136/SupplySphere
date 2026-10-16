@@ -46,8 +46,26 @@ async def update_shipment_status(tracking_number: str, status: str) -> dict:
     return await _request("PATCH", f"/api/shipments/{tracking_number}/status", {"status": status})
 
 
+async def products() -> list[dict]:
+    return await _request("GET", "/api/products")
+
+
 async def product(sku: str) -> dict:
     return await _request("GET", f"/api/products/{sku}")
+
+
+async def set_temperature_range(sku: str, profile: str, min_c: float | None, max_c: float | None) -> dict:
+    return await _request("PUT", f"/api/products/{sku}/temperature-range",
+                          {"profile": profile, "minC": min_c, "maxC": max_c})
+
+
+async def dock_door_monitors() -> list[dict]:
+    """Live dock door monitors, which run inside the AI service (not behind the gateway)."""
+    async with httpx.AsyncClient(base_url=get_settings().scm_ai_url, timeout=10) as client:
+        resp = await client.get("/ai/vision/dock-doors/monitors")
+    if resp.status_code >= 400:
+        raise ScmApiError(f"GET /ai/vision/dock-doors/monitors failed ({resp.status_code})")
+    return resp.json()
 
 
 async def purchase_orders() -> list[dict]:

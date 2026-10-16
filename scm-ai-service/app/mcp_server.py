@@ -20,6 +20,8 @@ settings = get_settings()
 mcp = FastMCP("scm-supply-chain", host=settings.mcp_host, port=settings.mcp_port)
 
 ShipmentStatus = Literal["CREATED", "IN_TRANSIT", "DELAYED", "DELIVERED", "DAMAGED"]
+StorageProfile = Literal["FROZEN", "CHILLED", "COOL"]
+COLD_CHAIN_ALERTS = {"COLD_CHAIN_BREACH", "DOCK_DOOR_OPEN"}
 
 
 @mcp.tool()
@@ -78,7 +80,8 @@ async def list_suppliers() -> list[dict]:
 
 @mcp.tool()
 async def recent_alerts() -> list[dict]:
-    """Recent operational alerts (low stock, delays, demand spikes, damaged shipments), newest first."""
+    """Recent operational alerts (low stock, delays, demand spikes, damaged shipments, cold-chain breaches,
+    reefer dock doors left open), newest first."""
     return await scm_client.alerts()
 
 
@@ -93,9 +96,65 @@ async def get_replenishment_recommendations() -> list[dict]:
 
 @mcp.tool()
 async def search_policies(query: str) -> str:
-    """Search supplier contracts and SOPs (reorder policy, returns, damaged goods, SLAs, penalties).
+    """Search supplier contracts and SOPs (reorder policy, returns, damaged goods, cold chain receiving and
+    reefer dock doors, SLAs, penalties).
     Returns matching excerpts labelled with their source document."""
     return rag.format_docs(await rag.search(query))
+
+
+@mcp.tool()
+async def list_cold_chain_products() -> list[dict]:
+    """Products that must be kept cold, with their storage range: profile (FROZEN, CHILLED or COOL) and
+    minC / maxC in Celsius. Products not listed are ambient."""
+    return [p for p in await scm_client.products() if p.get("temperatureRange")]
+
+
+@mcp.tool()
+async def set_product_temperature_range(sku: str, profile: StorageProfile, min_c: float | None = None,
+                                        max_c: float | None = None) -> dict:
+    """Set a product's cold-chain storage range. Limits left out use the profile's defaults
+    (FROZEN -30 to -18, CHILLED 0 to 4, COOL 8 to 15 °C). Inspections of its shipments use this range."""
+    return await scm_client.set_temperature_range(sku, profile, min_c, max_c)
+
+
+@mcp.tool()
+async def list_dock_door_monitors() -> list[dict]:
+    """Live reefer dock door camera monitors: whether each door is open now, for how long, its limit in
+    seconds, openings seen and DOCK_DOOR_OPEN alerts raised since the monitor started."""
+    return await scm_client.dock_door_monitors()
+
+
+@mcp.tool()
+async def get_cold_chain_status() -> dict:
+    """Cold-chain overview: shipments of temperature-controlled products with their storage range,
+    status and last inspection notes; recent COLD_CHAIN_BREACH and DOCK_DOOR_OPEN alerts; and the live
+    dock door monitors. Use for questions like 'which reefer loads are at risk' or 'which doors were
+    open too long'."""
+    return await cold_chain_status()
+
+
+async def cold_chain_status() -> dict:
+    ranges = {p["sku"]: p for p in await scm_client.products() if p.get("temperatureRange")}
+    order_skus = {o["orderNumber"]: o["product"]["sku"] for o in await scm_client.purchase_orders()}
+    shipments = []
+    for s in await scm_client.shipments():
+        sku = order_skus.get((s.get("purchaseOrder") or {}).get("orderNumber"))
+        if sku in ranges:
+            shipments.append({
+                **{k: s.get(k) for k in ("trackingNumber", "status", "carrier", "origin", "destination", "eta",
+                                         "inspectionNotes")},
+                "sku": sku, "productName": ranges[sku]["name"],
+                "temperatureRange": ranges[sku]["temperatureRange"],
+            })
+    try:
+        monitors = await scm_client.dock_door_monitors()
+    except Exception as e:  # the AI service may be down; the rest of the overview still helps
+        monitors = {"unavailable": str(e)}
+    return {
+        "coldChainShipments": shipments,
+        "recentAlerts": [a for a in await scm_client.alerts() if a.get("type") in COLD_CHAIN_ALERTS],
+        "dockDoorMonitors": monitors,
+    }
 
 
 if __name__ == "__main__":
