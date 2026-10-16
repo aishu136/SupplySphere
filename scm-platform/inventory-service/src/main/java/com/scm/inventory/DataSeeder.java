@@ -30,5 +30,9 @@ public class DataSeeder implements CommandLineRunner {
         inventory.save(new InventoryItem("SKU-2002", "WH-WEST", 45, 30, 100));
         inventory.save(new InventoryItem("SKU-3001", "WH-EAST", 38, 50, 300));
         inventory.save(new InventoryItem("SKU-3002", "WH-EAST", 120, 40, 100));
+        // Cold chain (frozen and chilled food), all above their reorder points.
+        inventory.save(new InventoryItem("SKU-4001", "WH-EAST", 180, 60, 200));
+        inventory.save(new InventoryItem("SKU-4002", "WH-EAST", 400, 150, 600));
+        inventory.save(new InventoryItem("SKU-4003", "WH-WEST", 90, 40, 120));
     }
 }

@@ -385,7 +385,18 @@ when its position's reorder point, reorder quantity, price or lead time changes.
 - **RL replenishment:** see where the learned policy beats the SOP rule, then place its PO.
 - **Assistant:** ask *"Which items are below their reorder point, and what does the reorder policy say to do?"*
 - **Vision:** open a shipment's **Inspect** link and upload a photo of the package.
-- **Cold chain:** open a shipment's **Cold chain** link, tick *Thermal image* and upload a thermal frame of a reefer load.
+- **Cold chain:** the seed data has two reefer loads of frozen food in transit, `TRK-DEMO000004` (salmon,
+  -30 to -18 °C) and `TRK-DEMO000005` (ice cream, -30 to -25 °C). Generate sample media first:
+  `scm-ai-service/.venv/Scripts/python scripts/make-cold-chain-samples.py` (`.venv/bin/python` on
+  macOS/Linux) writes them to `data/samples/`.
+  - Open `TRK-DEMO000004`'s **Cold chain** link, keep *Range of the shipment's product*, tick *Thermal
+    image* (scale -30 to 20 °C, ironbow) and upload `reefer-thermal-ok.png`: it passes. Upload
+    `reefer-thermal-hotspot.png` and the warm patch by the door seal is a critical breach. The shipment
+    is quarantined, a `COLD_CHAIN_BREACH` alert appears, and an exception workflow proposes a replacement PO.
+  - Upload `reefer-thermal-ok.png` for `TRK-DEMO000005`: the same -22 °C load breaches the ice cream's
+    tighter catalog range.
+- **Dock doors:** upload `data/samples/dock-door.avi` on the **Dock doors** page with the default door
+  region. It finds a 29 s opening and a 144 s one over the 2-minute limit, and ignores someone walking past.
 
 ## Tests
 
