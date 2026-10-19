@@ -125,7 +125,8 @@ export interface WorkflowAction {
   reason: string;
 }
 
-export type WorkflowStatus = 'awaiting_approval' | 'completed' | 'partially_failed' | 'rejected' | 'no_action' | 'running';
+export type WorkflowStatus = 'awaiting_approval' | 'completed' | 'partially_failed' | 'rejected' | 'no_action' | 'running'
+  | 'failed';
 
 /** A LangGraph exception-resolution run (see scm-ai-service/app/workflows). */
 export interface ExceptionWorkflow {

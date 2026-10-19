@@ -284,6 +284,11 @@ graph TD;
 **Durable state.** Checkpoints go to SQLite (`data/workflows.sqlite`) through `AsyncSqliteSaver`, so a
 workflow waiting for approval survives a restart and resumes where it stopped.
 
+**Retries.** A run that stops between steps shows as `failed`, with the step it stopped at. That happens
+when a step raises (for example, a service is briefly down while context is gathered) or when the AI
+service restarts mid-run. Starting it again resumes from its last checkpoint and re-runs that step. A
+redelivered alert does this automatically, and the UI has a **Retry** button.
+
 **Idempotent.** The thread ID is `exception-<alertId>`, so a redelivered alert reuses its workflow
 instead of starting a second one.
 

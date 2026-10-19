@@ -14,6 +14,10 @@ log = logging.getLogger(__name__)
 THREAD_PREFIX = "exception-"
 _graph = None
 _checkpointer = None
+# Runs executing right now. A run that stopped between steps and is not executing failed (a step raised,
+# or the service restarted mid-run); starting it again resumes from its last checkpoint.
+_in_flight: set[str] = set()
+_errors: dict[str, str] = {}  # last error per failed run, while this process is up
 
 
 def init(checkpointer: Any) -> None:
@@ -39,9 +43,21 @@ async def view(thread_id: str) -> dict | None:
         return None
     values = snapshot.values
     pending = [i.value for t in snapshot.tasks for i in t.interrupts]
+    if pending:
+        status = "awaiting_approval"
+    elif values.get("status"):
+        status = values["status"]
+    elif snapshot.next and thread_id not in _in_flight:
+        status = "failed"
+    else:
+        status = "running"
+    outcome = values.get("outcome")
+    if status == "failed":
+        reason = _errors.get(thread_id, "the service stopped before it finished")
+        outcome = f"Failed at {', '.join(snapshot.next)}: {reason}. Start the workflow again to retry."
     return {
         "threadId": thread_id,
-        "status": "awaiting_approval" if pending else values.get("status", "running"),
+        "status": status,
         "alert": values.get("alert"),
         "kind": values.get("kind"),
         "context": values.get("context"),
@@ -49,7 +65,7 @@ async def view(thread_id: str) -> dict | None:
         "planner": values.get("planner"),
         "decision": values.get("decision"),
         "results": values.get("results", []),
-        "outcome": values.get("outcome"),
+        "outcome": outcome,
         "planRunId": values.get("plan_run_id"),
         "updatedAt": snapshot.created_at,
     }
@@ -64,13 +80,30 @@ def _traced(thread_id: str, alert: dict, phase: str) -> dict:
          "entity_id": alert.get("entityId")})}
 
 
+async def _invoke(thread_id: str, payload: Any, config: dict) -> None:
+    _in_flight.add(thread_id)
+    try:
+        await graph().ainvoke(payload, config)
+        _errors.pop(thread_id, None)
+    except Exception as e:
+        _errors[thread_id] = str(e) or type(e).__name__
+        raise
+    finally:
+        _in_flight.discard(thread_id)
+
+
 async def start(alert: dict) -> dict:
-    """Idempotent per alert: the alert id is the thread id, so a redelivered alert reuses its run."""
+    """Idempotent per alert: the alert id is the thread id, so a redelivered alert reuses its run.
+    A failed run is retried instead: it resumes from its last checkpoint, re-running the failed step."""
     thread_id = THREAD_PREFIX + alert["alertId"]
     existing = await view(thread_id)
-    if existing:
+    if existing and existing["status"] != "failed":
         return existing
-    await graph().ainvoke({"alert": alert}, _traced(thread_id, alert, "plan"))
+    if existing:
+        log.info("Retrying failed workflow %s", thread_id)
+        await _invoke(thread_id, None, _traced(thread_id, existing["alert"], "retry"))
+    else:
+        await _invoke(thread_id, {"alert": alert}, _traced(thread_id, alert, "plan"))
     return await view(thread_id)
 
 
@@ -80,8 +113,8 @@ async def decide(thread_id: str, approved: bool, actions: list[dict] | None = No
         raise KeyError(thread_id)
     if current["status"] != "awaiting_approval":
         raise ValueError(f"Workflow {thread_id} is {current['status']}, not awaiting approval")
-    await graph().ainvoke(Command(resume={"approved": approved, "actions": actions, "comment": comment}),
-                          _traced(thread_id, current["alert"], "decision"))
+    await _invoke(thread_id, Command(resume={"approved": approved, "actions": actions, "comment": comment}),
+                  _traced(thread_id, current["alert"], "decision"))
     record_decision_feedback(current, approved, actions, comment)
     return await view(thread_id)
 

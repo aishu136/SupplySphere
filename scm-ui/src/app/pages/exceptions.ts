@@ -10,7 +10,7 @@ const SUPPORTED = ['LOW_STOCK', 'SHIPMENT_DELAYED', 'COLD_CHAIN_BREACH'];
   selector: 'app-exceptions',
   imports: [FormsModule, DatePipe, JsonPipe],
   styles: `
-    $status-tones: (awaiting_approval: warn, completed: ok, rejected: danger, partially_failed: danger);
+    $status-tones: (awaiting_approval: warn, completed: ok, rejected: danger, partially_failed: danger, failed: danger);
 
     .run {
       border-left: 4px solid var(--border);
@@ -91,6 +91,9 @@ const SUPPORTED = ['LOW_STOCK', 'SHIPMENT_DELAYED', 'COLD_CHAIN_BREACH'];
           </div>
         }
         @if (r.outcome) { <p><strong>Outcome:</strong> {{ r.outcome }}</p> }
+        @if (r.status === 'failed') {
+          <button class="secondary" (click)="start(r.alert)" [disabled]="busy()">Retry</button>
+        }
         @if (r.context) {
           <details><summary class="muted">Context gathered</summary><pre>{{ r.context | json }}</pre></details>
         }
@@ -130,7 +133,8 @@ export class Exceptions implements OnInit {
   }
 
   badge(status: string) {
-    return { awaiting_approval: 'MEDIUM', completed: 'ok', rejected: 'CANCELLED', partially_failed: 'CRITICAL' }[status] ?? '';
+    return { awaiting_approval: 'MEDIUM', completed: 'ok', rejected: 'CANCELLED', partially_failed: 'CRITICAL',
+      failed: 'CRITICAL' }[status] ?? '';
   }
 
   start(alert: Alert) {

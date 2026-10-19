@@ -209,3 +209,31 @@ def test_minor_cold_chain_breach_reorders_only_for_low_destination(calls, monkey
 def test_breach_severity_parsing():
     assert g.breach_severity("major cold-chain breach for chilled goods; display reads 7.5 °C") == "major"
     assert g.breach_severity("within chilled range (0 to 4 °C)") is None
+
+
+def test_failed_step_shows_failed_and_retry_resumes(calls, monkeypatch):
+    real_inventory = g.scm_client.inventory
+    attempts = []
+
+    async def flaky_inventory(sku=None):
+        attempts.append(sku)
+        if len(attempts) == 1:
+            raise g.scm_client.ScmApiError("GET /api/inventory/SKU-3002 failed (503): inventory-service unavailable")
+        return await real_inventory(sku)
+
+    monkeypatch.setattr(g.scm_client, "inventory", flaky_inventory)
+    a = alert("LOW_STOCK", "SKU-3002", "r1")
+
+    with pytest.raises(g.scm_client.ScmApiError):
+        run(workflows.start(a))
+    failed = run(workflows.view("exception-r1"))
+    assert failed["status"] == "failed"
+    assert "low_stock_context" in failed["outcome"] and "503" in failed["outcome"]
+    assert [r["status"] for r in run(workflows.list_runs())] == ["failed"]
+
+    # A redelivered alert (or the UI's Retry) resumes from the checkpoint and re-runs the failed step.
+    retried = run(workflows.start(a))
+    assert retried["status"] == "awaiting_approval"
+    assert retried["plan"]["actions"][0]["quantity"] == 64
+    assert len(attempts) == 2
+    assert calls == []
