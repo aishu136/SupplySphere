@@ -14,8 +14,11 @@ dependencies {
     compileOnly("org.springframework.boot:spring-boot-starter-data-cassandra")
     compileOnly("org.springframework.boot:spring-boot-starter-data-redis")
 
-    // Shared Testcontainers setup for the services' integration tests.
+    // Shared setup for the services' integration tests: Testcontainers, or local Cassandra/Redis without Docker.
     testFixturesApi("org.springframework.boot:spring-boot-testcontainers")
     testFixturesApi("org.testcontainers:cassandra")
     testFixturesImplementation("org.springframework.boot:spring-boot-test")
+    testFixturesImplementation("org.springframework:spring-test")
+    testFixturesCompileOnly("org.apache.cassandra:java-driver-core")
+    testFixturesCompileOnly("org.springframework.data:spring-data-redis")
 }

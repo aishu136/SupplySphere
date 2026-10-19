@@ -135,9 +135,36 @@ Buildx, and the Docker Pipeline plugin.
 
 Each service runs with `./gradlew :<service>:bootRun` from `scm-platform` (ports 8081–8085, gateway on
 8080). It needs a Kafka broker on `localhost:9092`, Cassandra on `localhost:9042` and, for catalog-service,
-Redis on `localhost:6379`. `docker compose up -d cassandra redis` starts the last two. The Java tests start
-their own Cassandra and Redis with Testcontainers, so `./gradlew build` needs Docker. The AI service and UI
-run as before:
+Redis on `localhost:6379`.
+
+Cassandra 4 and later don't run natively on Windows, so on Windows run Cassandra and Redis in WSL 2
+(`wsl --install -d Ubuntu` once, from an administrator PowerShell). WSL forwards `localhost`, so the
+services and tests on Windows reach them with the default settings. In the Ubuntu shell, once:
+
+```bash
+# Cassandra 5.0 runs on Java 11 or 17
+sudo apt-get update && sudo apt-get install -y openjdk-17-jre-headless redis-server curl
+sudo curl -fsSL -o /etc/apt/keyrings/apache-cassandra.asc https://downloads.apache.org/cassandra/KEYS
+echo "deb [signed-by=/etc/apt/keyrings/apache-cassandra.asc] https://debian.cassandra.apache.org 50x main" \
+  | sudo tee /etc/apt/sources.list.d/cassandra.sources.list
+sudo apt-get update && sudo apt-get install -y cassandra
+# Optional, on machines with little memory: cap the heap (the default takes a quarter of RAM)
+sudo sed -i 's/^#MAX_HEAP_SIZE=.*/MAX_HEAP_SIZE="512M"/; s/^#HEAP_NEWSIZE=.*/HEAP_NEWSIZE="128M"/' \
+  /etc/cassandra/cassandra-env.sh
+```
+
+Then, whenever you work on the platform (Cassandra is ready when `nodetool status` shows `UN`):
+
+```bash
+sudo service cassandra start && sudo service redis-server start
+```
+
+With Docker, `docker compose up -d cassandra redis` starts both instead.
+
+The Java tests start their own Cassandra and Redis with Testcontainers when Docker is available. Without
+Docker, they use the Cassandra and Redis on `localhost`: each run gets its own keyspace
+(`test_<service>_<run>`, dropped afterwards) and Redis database 15 (emptied first), so `./gradlew build`
+works without Docker and never touches your dev data. The AI service and UI run as before:
 
 ```bash
 cd scm-ai-service
