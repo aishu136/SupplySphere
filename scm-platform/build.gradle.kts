@@ -21,7 +21,10 @@ subprojects {
 
     extensions.configure<io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension> {
         imports {
-            mavenBom(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
+            mavenBom(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES) {
+                // 1.21.4 uses a Docker API version that Docker Engine 29+ still accepts.
+                bomProperty("testcontainers.version", "1.21.4")
+            }
             mavenBom("org.springframework.cloud:spring-cloud-dependencies:$springCloudVersion")
             mavenBom("org.apache.camel.springboot:camel-spring-boot-bom:$camelVersion")
         }

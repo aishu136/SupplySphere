@@ -24,7 +24,6 @@ export interface Product {
 }
 
 export interface InventoryItem {
-  id: number;
   product: Product;
   warehouseCode: string;
   quantity: number;
@@ -37,7 +36,6 @@ export interface InventoryItem {
 export type OrderStatus = 'CREATED' | 'APPROVED' | 'SHIPPED' | 'RECEIVED' | 'CANCELLED';
 
 export interface PurchaseOrder {
-  id: number;
   orderNumber: string;
   supplier: Supplier;
   product: Product;
@@ -51,7 +49,6 @@ export interface PurchaseOrder {
 export type ShipmentStatus = 'CREATED' | 'IN_TRANSIT' | 'DELAYED' | 'DELIVERED' | 'DAMAGED';
 
 export interface Shipment {
-  id: number;
   trackingNumber: string;
   purchaseOrder: PurchaseOrder | null;
   carrier: string;

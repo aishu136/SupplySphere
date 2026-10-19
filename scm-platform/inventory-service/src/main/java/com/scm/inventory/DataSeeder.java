@@ -4,7 +4,6 @@ import com.scm.inventory.domain.InventoryItem;
 import com.scm.inventory.domain.InventoryItemRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /** Demo stock positions for the SKUs seeded by catalog-service. */
 @Component
@@ -17,7 +16,6 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     @Override
-    @Transactional
     public void run(String... args) {
         if (inventory.count() > 0) {
             return;

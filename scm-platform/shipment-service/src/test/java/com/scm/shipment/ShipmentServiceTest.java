@@ -7,9 +7,11 @@ import com.scm.shipment.domain.Shipment.Status;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import com.scm.common.test.CassandraTestcontainer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
@@ -27,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
         "management.tracing.enabled=false"})
 @EmbeddedKafka(partitions = 1)
+@Import(CassandraTestcontainer.class)
 class ShipmentServiceTest {
 
     @Autowired ShipmentService shipmentService;

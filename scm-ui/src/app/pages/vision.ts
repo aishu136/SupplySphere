@@ -25,7 +25,7 @@ import { InspectionResult, Shipment } from '../models';
         <input type="file" accept="image/*" (change)="pick($event)">
         <select name="tracking" [(ngModel)]="trackingNumber">
           <option value="">No shipment (just analyse)</option>
-          @for (s of shipments(); track s.id) { <option [value]="s.trackingNumber">{{ s.trackingNumber }} · {{ s.carrier }}</option> }
+          @for (s of shipments(); track s.trackingNumber) { <option [value]="s.trackingNumber">{{ s.trackingNumber }} · {{ s.carrier }}</option> }
         </select>
         <label class="row"><input type="checkbox" name="llm" [(ngModel)]="useLlm"> Claude visual review</label>
         <button type="submit" [disabled]="!file || busy()">{{ busy() ? 'Inspecting…' : 'Inspect' }}</button>

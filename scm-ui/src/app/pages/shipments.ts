@@ -15,7 +15,7 @@ import { Shipment, ShipmentStatus } from '../models';
         <thead><tr><th>Tracking</th><th>PO</th><th>Carrier</th><th>Route</th><th>ETA</th><th>Status</th>
           <th>Inspection</th><th>Update</th><th></th></tr></thead>
         <tbody>
-          @for (s of shipments(); track s.id) {
+          @for (s of shipments(); track s.trackingNumber) {
             <tr>
               <td>{{ s.trackingNumber }}</td>
               <td>{{ s.purchaseOrder?.orderNumber ?? '—' }}</td>

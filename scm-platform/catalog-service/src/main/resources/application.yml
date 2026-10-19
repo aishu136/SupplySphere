@@ -4,14 +4,22 @@ server:
 spring:
   application:
     name: catalog-service
-  datasource:
-    url: ${DB_URL:jdbc:h2:mem:catalog;DB_CLOSE_DELAY=-1}
-    username: ${DB_USER:sa}
-    password: ${DB_PASSWORD:}
-  jpa:
-    hibernate:
-      ddl-auto: update
-    open-in-view: false
+  cassandra:
+    contact-points: ${CASSANDRA_CONTACT_POINTS:localhost:9042}
+    local-datacenter: ${CASSANDRA_DATACENTER:datacenter1}
+    keyspace-name: catalog
+    schema-action: create-if-not-exists
+    request:
+      timeout: 5s
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Fail fast to Cassandra when Redis is slow or down.
+      connect-timeout: 500ms
+      timeout: 500ms
+  cache:
+    type: redis
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -26,6 +34,10 @@ management:
     web:
       exposure:
         include: health,info,metrics
+  health:
+    # The service keeps answering from Cassandra without its cache, so Redis doesn't decide its health.
+    redis:
+      enabled: false
   tracing:
     sampling:
       probability: 1.0

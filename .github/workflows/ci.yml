@@ -27,7 +27,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v5
-      - name: Test and package all services (embedded Kafka)
+      - name: Test and package all services (embedded Kafka, Cassandra and Redis via Testcontainers)
         run: ./gradlew build
       - name: Upload test reports
         if: failure()
@@ -154,7 +154,7 @@ jobs:
       - name: Start infrastructure and microservices
         run: >
           docker compose up -d --build --wait --wait-timeout 600
-          kafka postgres jaeger
+          kafka cassandra redis jaeger
           catalog-service inventory-service order-service shipment-service alert-service api-gateway
           flink-jobmanager flink-taskmanager
           scm-ai

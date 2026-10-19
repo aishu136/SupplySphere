@@ -2,7 +2,8 @@ package com.scm.order.domain;
 
 import com.scm.common.catalog.ProductView;
 import com.scm.common.catalog.SupplierView;
-import jakarta.persistence.*;
+import org.springframework.data.cassandra.core.mapping.PrimaryKey;
+import org.springframework.data.cassandra.core.mapping.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -12,20 +13,14 @@ import java.time.LocalDate;
  * Product and supplier details are copied in when the order is placed: a PO records what was
  * ordered, from whom, at what price, even if the catalog changes later.
  */
-@Entity
-@Table(name = "purchase_orders")
+@Table("purchase_orders")
 public class PurchaseOrder {
 
     public enum Status { CREATED, APPROVED, SHIPPED, RECEIVED, CANCELLED }
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(nullable = false, unique = true)
+    @PrimaryKey
     private String orderNumber;
 
-    @Column(nullable = false)
     private String sku;
     private String productName;
     private String category;
@@ -34,11 +29,10 @@ public class PurchaseOrder {
     private String supplierName;
     private int leadTimeDays;
 
-    @Column(nullable = false)
     private String warehouseCode;
     private int quantity;
 
-    @Enumerated(EnumType.STRING)
+    /** Stored as its name. */
     private Status status;
 
     private Instant createdAt;
@@ -77,7 +71,6 @@ public class PurchaseOrder {
         return new ProductView(null, sku, productName, category, unitPrice, supplierView());
     }
 
-    public Long getId() { return id; }
     public String getOrderNumber() { return orderNumber; }
     public String getSku() { return sku; }
     public Long getSupplierId() { return supplierId; }

@@ -46,7 +46,7 @@ import { Alert, DashboardSummary, InventoryItem, Shipment } from '../models';
           <div class="table-wrap"><table>
             <thead><tr><th>SKU</th><th>Warehouse</th><th class="num">On hand</th><th class="num">Reorder pt</th></tr></thead>
             <tbody>
-              @for (i of lowStock(); track i.id) {
+              @for (i of lowStock(); track i.product.sku + i.warehouseCode) {
                 <tr><td>{{ i.product.sku }}</td><td>{{ i.warehouseCode }}</td><td class="num">{{ i.quantity }}</td><td class="num">{{ i.reorderPoint }}</td></tr>
               } @empty { <tr><td colspan="4" class="muted">All positions healthy.</td></tr> }
             </tbody>
@@ -58,7 +58,7 @@ import { Alert, DashboardSummary, InventoryItem, Shipment } from '../models';
           <div class="table-wrap"><table>
             <thead><tr><th>Tracking</th><th>Carrier</th><th>Destination</th><th>ETA</th></tr></thead>
             <tbody>
-              @for (s of delayed(); track s.id) {
+              @for (s of delayed(); track s.trackingNumber) {
                 <tr><td>{{ s.trackingNumber }}</td><td>{{ s.carrier }}</td><td>{{ s.destination }}</td><td>{{ s.eta | date: 'MMM d, HH:mm' }}</td></tr>
               } @empty { <tr><td colspan="4" class="muted">Nothing late.</td></tr> }
             </tbody>

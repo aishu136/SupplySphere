@@ -21,7 +21,7 @@ import { InventoryItem } from '../models';
           <th class="num">On hand</th><th class="num">Reorder pt</th><th>Adjust</th><th></th>
         </tr></thead>
         <tbody>
-          @for (i of visible(); track i.id) {
+          @for (i of visible(); track i.product.sku + i.warehouseCode) {
             <tr [class.low]="i.lowStock">
               <td>{{ i.product.sku }}</td>
               <td>{{ i.product.name }}

@@ -1,9 +1,11 @@
 package com.scm.order;
 
 import com.scm.common.web.ServiceUnavailableException;
+import com.scm.common.test.CassandraTestcontainer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "scm.services.catalog-url=http://localhost:1",
         "management.tracing.enabled=false"})
 @EmbeddedKafka(partitions = 1)
+@Import(CassandraTestcontainer.class)
 class CatalogCircuitBreakerTest {
 
     @Autowired OrderService orderService;

@@ -3,18 +3,16 @@ package com.scm.inventory.domain;
 import com.scm.common.catalog.ProductView;
 import com.scm.common.catalog.SupplierView;
 import com.scm.common.catalog.TemperatureRange;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import org.springframework.data.cassandra.core.mapping.PrimaryKey;
+import org.springframework.data.cassandra.core.mapping.Table;
 
 import java.math.BigDecimal;
 
 /** Local read model of a catalog product, kept current from scm.catalog.events. */
-@Entity
-@Table(name = "product_refs")
+@Table("product_refs")
 public class ProductRef {
 
-    @Id
+    @PrimaryKey
     private String sku;
     private Long productId;
     private String name;

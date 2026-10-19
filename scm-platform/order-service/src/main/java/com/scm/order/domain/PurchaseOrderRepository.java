@@ -1,13 +1,7 @@
 package com.scm.order.domain;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.cassandra.repository.CassandraRepository;
 
-import java.util.List;
-import java.util.Optional;
-
-public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Long> {
-
-    Optional<PurchaseOrder> findByOrderNumber(String orderNumber);
-
-    List<PurchaseOrder> findAllByOrderByCreatedAtDesc();
+/** Keyed by order number, the business key other services use. */
+public interface PurchaseOrderRepository extends CassandraRepository<PurchaseOrder, String> {
 }

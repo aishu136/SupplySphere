@@ -31,7 +31,7 @@ import { OrderStatus, Product, PurchaseOrder } from '../models';
         <thead><tr><th>Order</th><th>SKU</th><th>Supplier</th><th>Warehouse</th><th class="num">Qty</th>
           <th>Status</th><th>Expected</th><th>Created</th><th></th></tr></thead>
         <tbody>
-          @for (o of orders(); track o.id) {
+          @for (o of orders(); track o.orderNumber) {
             <tr>
               <td>{{ o.orderNumber }}</td><td>{{ o.product.sku }}</td><td>{{ o.supplier.name }}</td>
               <td>{{ o.warehouseCode }}</td><td class="num">{{ o.quantity }}</td>

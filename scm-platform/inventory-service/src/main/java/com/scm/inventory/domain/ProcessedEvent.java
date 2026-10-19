@@ -1,17 +1,15 @@
 package com.scm.inventory.domain;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import org.springframework.data.cassandra.core.mapping.PrimaryKey;
+import org.springframework.data.cassandra.core.mapping.Table;
 
 import java.time.Instant;
 
 /** Idempotent consumer: records each applied event so a Kafka redelivery never books stock twice. */
-@Entity
-@Table(name = "processed_events")
+@Table("processed_events")
 public class ProcessedEvent {
 
-    @Id
+    @PrimaryKey
     private String eventId;
     private Instant processedAt;
 

@@ -1,21 +1,19 @@
 package com.scm.inventory.domain;
 
-import jakarta.persistence.*;
+import org.springframework.data.cassandra.core.cql.PrimaryKeyType;
+import org.springframework.data.cassandra.core.mapping.PrimaryKeyColumn;
+import org.springframework.data.cassandra.core.mapping.Table;
 
 import java.time.Instant;
 
-@Entity
-@Table(name = "inventory_items", uniqueConstraints = @UniqueConstraint(columnNames = {"sku", "warehouseCode"}))
+/** Partitioned by SKU, one row per warehouse: a SKU's positions are read together. */
+@Table("inventory_items")
 public class InventoryItem {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(nullable = false)
+    @PrimaryKeyColumn(ordinal = 0, type = PrimaryKeyType.PARTITIONED)
     private String sku;
 
-    @Column(nullable = false)
+    @PrimaryKeyColumn(ordinal = 1, type = PrimaryKeyType.CLUSTERED)
     private String warehouseCode;
 
     private int quantity;
@@ -46,7 +44,6 @@ public class InventoryItem {
         this.updatedAt = Instant.now();
     }
 
-    public Long getId() { return id; }
     public String getSku() { return sku; }
     public String getWarehouseCode() { return warehouseCode; }
     public int getQuantity() { return quantity; }

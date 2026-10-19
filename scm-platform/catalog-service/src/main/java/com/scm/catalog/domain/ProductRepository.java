@@ -1,10 +1,7 @@
 package com.scm.catalog.domain;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.cassandra.repository.CassandraRepository;
 
-import java.util.Optional;
-
-public interface ProductRepository extends JpaRepository<Product, Long> {
-
-    Optional<Product> findBySku(String sku);
+/** Keyed by SKU, the catalog's business key: every lookup is a single-partition read. */
+public interface ProductRepository extends CassandraRepository<Product, String> {
 }

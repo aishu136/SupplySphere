@@ -3,10 +3,11 @@ package com.scm.common.event;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
- * Publishes messages to Kafka only after the surrounding database transaction commits, so other
- * services never see an event for a change that was rolled back. Outside a transaction the
- * message is sent immediately. (For guaranteed delivery across crashes, the next step is a
- * transactional outbox table.)
+ * Publishes messages to Kafka. Inside a Spring transaction they are held until it commits; outside
+ * one they are sent immediately. The services store their data in Cassandra, which has no
+ * multi-row transactions, so they write first and publish only once the write has succeeded:
+ * no service sees an event for a change that was not stored. (For guaranteed delivery across
+ * crashes, the next step is an outbox table written in the same logged batch as the change.)
  */
 public class EventPublisher {
 

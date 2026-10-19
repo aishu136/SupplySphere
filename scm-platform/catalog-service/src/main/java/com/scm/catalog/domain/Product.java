@@ -2,29 +2,26 @@ package com.scm.catalog.domain;
 
 import com.scm.common.catalog.ProductView;
 import com.scm.common.catalog.TemperatureRange;
-import jakarta.persistence.*;
+import org.springframework.data.cassandra.core.mapping.PrimaryKey;
+import org.springframework.data.cassandra.core.mapping.Table;
 
 import java.math.BigDecimal;
 
-@Entity
-@Table(name = "products")
+@Table("products")
 public class Product {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(nullable = false, unique = true)
+    @PrimaryKey
     private String sku;
 
-    @Column(nullable = false)
-    private String name;
+    /** Assigned by the catalog (Cassandra has no sequences). */
+    private Long id;
 
+    private String name;
     private String category;
     private BigDecimal unitPrice;
 
-    @ManyToOne(optional = false)
-    private Supplier supplier;
+    /** Cassandra has no joins: the supplier is looked up by ID when the product is rendered. */
+    private Long supplierId;
 
     /** Cold-chain storage requirement; all null for ambient products. */
     private String storageProfile;
@@ -33,17 +30,18 @@ public class Product {
 
     protected Product() {}
 
-    public Product(String sku, String name, String category, BigDecimal unitPrice, Supplier supplier) {
+    public Product(Long id, String sku, String name, String category, BigDecimal unitPrice, Supplier supplier) {
+        this.id = id;
         this.sku = sku;
         this.name = name;
         this.category = category;
         this.unitPrice = unitPrice;
-        this.supplier = supplier;
+        this.supplierId = supplier.getId();
     }
 
-    public Product(String sku, String name, String category, BigDecimal unitPrice, Supplier supplier,
+    public Product(Long id, String sku, String name, String category, BigDecimal unitPrice, Supplier supplier,
                    TemperatureRange temperatureRange) {
-        this(sku, name, category, unitPrice, supplier);
+        this(id, sku, name, category, unitPrice, supplier);
         setTemperatureRange(temperatureRange);
     }
 
@@ -57,9 +55,10 @@ public class Product {
         return storageProfile == null ? null : new TemperatureRange(storageProfile, minTempC, maxTempC);
     }
 
-    public ProductView toView() {
+    public ProductView toView(Supplier supplier) {
         return new ProductView(id, sku, name, category, unitPrice, supplier.toView(), getTemperatureRange());
     }
 
     public String getSku() { return sku; }
+    public Long getSupplierId() { return supplierId; }
 }

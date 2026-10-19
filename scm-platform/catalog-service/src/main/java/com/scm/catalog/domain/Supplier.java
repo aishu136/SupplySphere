@@ -1,19 +1,17 @@
 package com.scm.catalog.domain;
 
 import com.scm.common.catalog.SupplierView;
-import jakarta.persistence.*;
+import org.springframework.data.cassandra.core.mapping.PrimaryKey;
+import org.springframework.data.cassandra.core.mapping.Table;
 
-@Entity
-@Table(name = "suppliers")
+@Table("suppliers")
 public class Supplier {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    /** Assigned by the catalog (Cassandra has no sequences); other services' data refers to it. */
+    @PrimaryKey
     private Long id;
 
-    @Column(nullable = false)
     private String name;
-
     private String contactEmail;
     private String country;
     private double rating;
@@ -21,7 +19,8 @@ public class Supplier {
 
     protected Supplier() {}
 
-    public Supplier(String name, String contactEmail, String country, double rating, int leadTimeDays) {
+    public Supplier(Long id, String name, String contactEmail, String country, double rating, int leadTimeDays) {
+        this.id = id;
         this.name = name;
         this.contactEmail = contactEmail;
         this.country = country;

@@ -5,9 +5,11 @@ import com.scm.common.catalog.ProductView;
 import com.scm.common.catalog.SupplierView;
 import com.scm.common.event.SupplyChainEvent;
 import com.scm.common.event.Topics;
+import com.scm.common.test.CassandraTestcontainer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 
@@ -23,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "scm.feeds.inbox=build/test-inbox",
         "management.tracing.enabled=false"})
 @EmbeddedKafka(partitions = 1)
+@Import(CassandraTestcontainer.class)
 class InventoryServiceTest {
 
     @Autowired InventoryService inventoryService;

@@ -11,8 +11,8 @@ import com.scm.order.domain.PurchaseOrderRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,12 +34,13 @@ public class OrderService {
         this.events = events;
     }
 
-    @Transactional(readOnly = true)
+    /** Newest first, sorted here: the table is partitioned by order number, which has no order of its own. */
     public List<PurchaseOrderView> findAll() {
-        return orders.findAllByOrderByCreatedAtDesc().stream().map(PurchaseOrderView::of).toList();
+        return orders.findAll().stream()
+                .sorted(Comparator.comparing(PurchaseOrder::getCreatedAt).reversed())
+                .map(PurchaseOrderView::of).toList();
     }
 
-    @Transactional(readOnly = true)
     public PurchaseOrderView get(String orderNumber) {
         return PurchaseOrderView.of(find(orderNumber));
     }
@@ -51,20 +52,17 @@ public class OrderService {
         if (!WAREHOUSES.contains(warehouseCode)) {
             throw new IllegalArgumentException("Unknown warehouse " + warehouseCode);
         }
-        // Remote call happens outside the DB transaction so no connection is held while waiting.
         ProductView product = catalog.product(sku);
-        return save(new PurchaseOrder("PO-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
+        return place(new PurchaseOrder("PO-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
                 product, warehouseCode, quantity));
     }
 
-    @Transactional
-    public PurchaseOrderView save(PurchaseOrder po) {
-        PurchaseOrder saved = orders.save(po);
-        publish("ORDER_CREATED", saved);
-        return PurchaseOrderView.of(saved);
+    private PurchaseOrderView place(PurchaseOrder po) {
+        orders.save(po);
+        publish("ORDER_CREATED", po);
+        return PurchaseOrderView.of(po);
     }
 
-    @Transactional
     public PurchaseOrderView updateStatus(String orderNumber, Status status) {
         PurchaseOrder po = find(orderNumber);
         if (po.isClosed()) {
@@ -78,13 +76,12 @@ public class OrderService {
      * Saga step, driven by shipment-service events. Idempotent by state: a redelivered or
      * out-of-date event for an order that has already moved on is ignored.
      */
-    @Transactional
     public void onShipmentEvent(SupplyChainEvent shipment) {
         String orderNumber = shipment.str("orderNumber");
         if (orderNumber == null) {
             return;
         }
-        var found = orders.findByOrderNumber(orderNumber);
+        var found = orders.findById(orderNumber);
         if (found.isEmpty()) {
             log.warn("{} refers to unknown order {}", shipment.type(), orderNumber);
             return;
@@ -107,12 +104,13 @@ public class OrderService {
 
     private void transition(PurchaseOrder po, Status status) {
         po.setStatus(status);
+        orders.save(po); // stored before the event goes out (see EventPublisher)
         // ORDER_RECEIVED is the saga's next step: inventory-service puts the goods into stock.
         publish("ORDER_" + status.name(), po);
     }
 
     private PurchaseOrder find(String orderNumber) {
-        return orders.findByOrderNumber(orderNumber)
+        return orders.findById(orderNumber)
                 .orElseThrow(() -> new NotFoundException("Purchase order " + orderNumber + " not found"));
     }
 

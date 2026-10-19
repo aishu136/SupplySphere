@@ -16,8 +16,7 @@ x-java-service: &java-service
   environment: &java-env
     KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
-    DB_USER: scm
-    DB_PASSWORD: scm
+    CASSANDRA_CONTACT_POINTS: cassandra:9042
     JAVA_TOOL_OPTIONS: -Xmx384m
   healthcheck:
     test: ["CMD-SHELL", "curl -fs localhost:$${PORT}/actuator/health || exit 1"]
@@ -25,7 +24,7 @@ x-java-service: &java-service
     retries: 30
   depends_on:
     kafka: { condition: service_healthy }
-    postgres: { condition: service_healthy }
+    cassandra: { condition: service_healthy }
 
 services:
   # ---------------------------------------------------------------- infrastructure
@@ -60,17 +59,28 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
     depends_on: [kafka]
 
-  # One Postgres server, one database per service (see scripts/postgres-init.sql).
-  postgres:
-    image: postgres:16-alpine
+  # One Cassandra node; each service creates and owns its keyspace (catalog, inventory, orders, shipments).
+  cassandra:
+    image: cassandra:5.0.5
+    ports: ["9042:9042"]
     environment:
-      POSTGRES_USER: scm
-      POSTGRES_PASSWORD: scm
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./scripts/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      CASSANDRA_CLUSTER_NAME: scm
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 128M
+    volumes: [cassandra-data:/var/lib/cassandra]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U scm"]
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' > /dev/null"]
+      start_period: 30s
+      interval: 10s
+      retries: 30
+
+  # Cache only (catalog reads): no persistence, least-recently-used keys go first when full.
+  redis:
+    image: redis:7.4-alpine
+    ports: ["6379:6379"]
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       retries: 10
 
@@ -88,7 +98,11 @@ services:
     environment:
       <<: *java-env
       PORT: 8081
-      DB_URL: jdbc:postgresql://postgres:5432/catalog
+      REDIS_HOST: redis
+    depends_on:
+      kafka: { condition: service_healthy }
+      cassandra: { condition: service_healthy }
+      redis: { condition: service_healthy }
 
   inventory-service:
     <<: *java-service
@@ -96,7 +110,6 @@ services:
     environment:
       <<: *java-env
       PORT: 8082
-      DB_URL: jdbc:postgresql://postgres:5432/inventory
       SCM_FEEDS_INBOX: /data/inbox/supplier-feeds
     volumes: [./data/inbox:/data/inbox]
 
@@ -106,7 +119,6 @@ services:
     environment:
       <<: *java-env
       PORT: 8083
-      DB_URL: jdbc:postgresql://postgres:5432/orders
       CATALOG_URL: http://catalog-service:8081
 
   shipment-service:
@@ -115,7 +127,6 @@ services:
     environment:
       <<: *java-env
       PORT: 8084
-      DB_URL: jdbc:postgresql://postgres:5432/shipments
       ORDER_URL: http://order-service:8083
 
   alert-service:
@@ -124,6 +135,8 @@ services:
     environment:
       <<: *java-env
       PORT: 8085
+    depends_on:
+      kafka: { condition: service_healthy }
 
   api-gateway:
     <<: *java-service
@@ -213,5 +226,5 @@ services:
     depends_on: [api-gateway, scm-ai]
 
 volumes:
-  pgdata:
+  cassandra-data:
   ai-data:   # vector index + trained RL policies, shared by scm-ai and scm-mcp

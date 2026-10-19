@@ -1,6 +1,6 @@
 package com.scm.inventory.domain;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.cassandra.repository.CassandraRepository;
 
-public interface ProcessedEventRepository extends JpaRepository<ProcessedEvent, String> {
+public interface ProcessedEventRepository extends CassandraRepository<ProcessedEvent, String> {
 }

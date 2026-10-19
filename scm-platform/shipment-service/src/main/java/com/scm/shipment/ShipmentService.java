@@ -8,9 +8,9 @@ import com.scm.common.web.NotFoundException;
 import com.scm.shipment.domain.Shipment;
 import com.scm.shipment.domain.ShipmentRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +20,10 @@ import java.util.UUID;
 public class ShipmentService {
 
     private static final String SOURCE = "shipment-service";
+
+    /** Sorted here: the table is partitioned by tracking number, which has no order of its own. */
+    private static final Comparator<Shipment> BY_ETA =
+            Comparator.comparing(Shipment::getEta, Comparator.nullsLast(Comparator.naturalOrder()));
 
     private final ShipmentRepository shipments;
     private final OrderClient orders;
@@ -31,17 +35,15 @@ public class ShipmentService {
         this.events = events;
     }
 
-    @Transactional(readOnly = true)
     public List<ShipmentView> findAll() {
-        return shipments.findAllByOrderByEtaAsc().stream().map(ShipmentView::of).toList();
+        return shipments.findAll().stream().sorted(BY_ETA).map(ShipmentView::of).toList();
     }
 
-    @Transactional(readOnly = true)
     public List<ShipmentView> findDelayed() {
-        return shipments.findDelayed(Instant.now()).stream().map(ShipmentView::of).toList();
+        Instant now = Instant.now();
+        return shipments.findAll().stream().filter(s -> s.isOverdue(now)).sorted(BY_ETA).map(ShipmentView::of).toList();
     }
 
-    @Transactional(readOnly = true)
     public ShipmentView get(String trackingNumber) {
         return ShipmentView.of(find(trackingNumber));
     }
@@ -49,27 +51,26 @@ public class ShipmentService {
     public ShipmentView create(String orderNumber, String carrier, String origin, String destination, Instant eta) {
         boolean linked = orderNumber != null && !orderNumber.isBlank();
         if (linked) {
-            orders.requireOrder(orderNumber); // remote check, outside the DB transaction
+            orders.requireOrder(orderNumber);
         }
-        return save(new Shipment("TRK-" + UUID.randomUUID().toString().substring(0, 10).toUpperCase(),
+        return book(new Shipment("TRK-" + UUID.randomUUID().toString().substring(0, 10).toUpperCase(),
                 linked ? orderNumber : null, carrier, origin, destination, eta));
     }
 
-    @Transactional
-    public ShipmentView save(Shipment shipment) {
-        Shipment saved = shipments.save(shipment);
-        publish("SHIPMENT_CREATED", saved);
-        return ShipmentView.of(saved);
+    private ShipmentView book(Shipment shipment) {
+        shipments.save(shipment);
+        publish("SHIPMENT_CREATED", shipment);
+        return ShipmentView.of(shipment);
     }
 
     /** IN_TRANSIT and DELIVERED events drive the order -> inventory saga downstream. */
-    @Transactional
     public ShipmentView updateStatus(String trackingNumber, Shipment.Status status, Instant newEta) {
         Shipment s = find(trackingNumber);
         s.setStatus(status);
         if (newEta != null) {
             s.setEta(newEta);
         }
+        shipments.save(s);
         publish("SHIPMENT_" + status.name(), s);
         return ShipmentView.of(s);
     }
@@ -78,13 +79,13 @@ public class ShipmentService {
      * Called by the Camel vision route when computer vision flags damage or a cold-chain breach.
      * Either way the goods are quarantined (DAMAGED), which also closes the shipment's ETA timer in Flink.
      */
-    @Transactional
     public void handleDamagedInspection(SupplyChainEvent inspection) {
         boolean coldChain = "COLD_CHAIN_INSPECTED".equals(inspection.type());
         Shipment s = find(inspection.entityId());
         s.setStatus(Shipment.Status.DAMAGED);
         s.setInspectionNotes(String.valueOf(inspection.data().getOrDefault("summary",
                 coldChain ? "Cold-chain breach" : "Damage detected")));
+        shipments.save(s);
         publish("SHIPMENT_DAMAGED", s);
         events.publish(Topics.ALERTS, s.getTrackingNumber(), coldChain
                 ? Alert.of(SOURCE, "COLD_CHAIN_BREACH", "CRITICAL",
@@ -95,14 +96,14 @@ public class ShipmentService {
                         s.getTrackingNumber()));
     }
 
-    @Transactional
     public void handleCleanInspection(SupplyChainEvent inspection) {
-        find(inspection.entityId()).setInspectionNotes(
-                String.valueOf(inspection.data().getOrDefault("summary", "Passed visual inspection")));
+        Shipment s = find(inspection.entityId());
+        s.setInspectionNotes(String.valueOf(inspection.data().getOrDefault("summary", "Passed visual inspection")));
+        shipments.save(s);
     }
 
     private Shipment find(String trackingNumber) {
-        return shipments.findByTrackingNumber(trackingNumber)
+        return shipments.findById(trackingNumber)
                 .orElseThrow(() -> new NotFoundException("Shipment " + trackingNumber + " not found"));
     }
 

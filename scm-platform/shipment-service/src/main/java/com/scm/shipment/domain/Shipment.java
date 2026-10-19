@@ -1,20 +1,16 @@
 package com.scm.shipment.domain;
 
-import jakarta.persistence.*;
+import org.springframework.data.cassandra.core.mapping.PrimaryKey;
+import org.springframework.data.cassandra.core.mapping.Table;
 
 import java.time.Instant;
 
-@Entity
-@Table(name = "shipments")
+@Table("shipments")
 public class Shipment {
 
     public enum Status { CREATED, IN_TRANSIT, DELAYED, DELIVERED, DAMAGED }
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(nullable = false, unique = true)
+    @PrimaryKey
     private String trackingNumber;
 
     /** Reference by business key to order-service's purchase order (no cross-service foreign key). */
@@ -24,13 +20,12 @@ public class Shipment {
     private String origin;
     private String destination;
 
-    @Enumerated(EnumType.STRING)
+    /** Stored as its name. */
     private Status status;
 
     private Instant eta;
     private Instant lastUpdated;
 
-    @Column(length = 2000)
     private String inspectionNotes;
 
     protected Shipment() {}
@@ -62,7 +57,12 @@ public class Shipment {
         this.lastUpdated = Instant.now();
     }
 
-    public Long getId() { return id; }
+    /** Delayed, or still moving past its ETA. */
+    public boolean isOverdue(Instant now) {
+        return status == Status.DELAYED
+                || ((status == Status.CREATED || status == Status.IN_TRANSIT) && eta != null && eta.isBefore(now));
+    }
+
     public String getTrackingNumber() { return trackingNumber; }
     public String getOrderNumber() { return orderNumber; }
     public String getCarrier() { return carrier; }

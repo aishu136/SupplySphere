@@ -6,7 +6,6 @@ import com.scm.order.domain.PurchaseOrder;
 import com.scm.order.domain.PurchaseOrderRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -22,7 +21,6 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     @Override
-    @Transactional
     public void run(String... args) {
         if (orders.count() > 0) {
             return;

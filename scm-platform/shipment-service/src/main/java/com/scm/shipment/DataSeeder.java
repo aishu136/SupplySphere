@@ -4,7 +4,6 @@ import com.scm.shipment.domain.Shipment;
 import com.scm.shipment.domain.ShipmentRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -23,7 +22,6 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     @Override
-    @Transactional
     public void run(String... args) {
         if (shipments.count() > 0) {
             return;

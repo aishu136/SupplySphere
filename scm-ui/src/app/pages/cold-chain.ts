@@ -34,7 +34,7 @@ import { ColdChainResult, Shipment, TemperatureProfile } from '../models';
           </select>
           <select name="tracking" [(ngModel)]="trackingNumber">
             <option value="">No shipment (just analyse)</option>
-            @for (s of shipments(); track s.id) { <option [value]="s.trackingNumber">{{ s.trackingNumber }} · {{ s.carrier }}</option> }
+            @for (s of shipments(); track s.trackingNumber) { <option [value]="s.trackingNumber">{{ s.trackingNumber }} · {{ s.carrier }}</option> }
           </select>
         </div>
         <div class="row">

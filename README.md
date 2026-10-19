@@ -22,7 +22,9 @@ replenishment and computer-vision dock inspection.
                │catalog ││inventory││ order ││ shipment ││ alert │           │
                │service ││ service ││service││ service  ││service│           │
                └───┬────┘└────┬────┘└───┬───┘└────┬─────┘└───┬───┘           │
-                   │ own DB   │ own DB  │ own DB  │ own DB    │              │
+                   │ own      │ own     │ own     │ own       │              │
+                   │ keyspace │keyspace │keyspace │ keyspace  │              │
+                   │ (Cassandra; catalog reads cached in Redis)              │
                    ▼          ▼         ▼         ▼           ▼              ▼
       ┌──────────────────────────────── Kafka ─────────────────────────────────────────────┐
       │ scm.catalog.events (compacted)  scm.inventory.events  scm.order.events              │
@@ -38,6 +40,8 @@ replenishment and computer-vision dock inspection.
 | Technology | Where | What it does |
 |---|---|---|
 | **Spring Boot 3.5 microservices** | `scm-platform/*-service` | Five domain services (catalog, inventory, order, shipment, alert), each with its own database and REST API. See [Microservices](#microservices) |
+| **Apache Cassandra 5** | catalog, inventory, order, shipment | Storage, with one keyspace per service, created on startup with its tables (Spring Data Cassandra). Tables are keyed by business key (`sku`, `orderNumber`, `trackingNumber`; stock is partitioned by SKU with one row per warehouse). The PO receipt writes stock and its processed-event record in one logged batch |
+| **Redis 7** | `catalog-service` (shared setup in `scm-common`) | Cache for catalog reads (product by SKU, product list, suppliers) through Spring Cache, read on every PO, dashboard and AI tool call. The entry is replaced and the list evicted on change, with a 10-minute TTL as a safety net. If Redis is down, reads fall through to Cassandra |
 | **Spring Cloud Gateway** | `scm-platform/api-gateway` | Single entry point: routing, a Resilience4j circuit breaker per downstream with 503 fallbacks, CORS, and a dashboard endpoint that fans out to four services and degrades gracefully |
 | **Apache Camel 4** | `inventory-service`, `shipment-service` | Supplier stock-feed ingestion (file → CSV → splitter), and a content-based router for vision inspections (damaged → DAMAGED + critical alert, clean → notes), with dead-letter channels |
 | **Kafka** | all | Event backbone: domain events, the delivery saga, catalog state transfer and alerts. All events share one JSON envelope: `eventId, type, source, entityId, timestamp, data` |
@@ -66,16 +70,22 @@ replenishment and computer-vision dock inspection.
 | `api-gateway` | 8080 | — | — | routes `/api/**` to the services above |
 
 **Patterns used**
-- **Database per service.** No service reads another's tables, and cross-service references use business keys
-  such as `orderNumber` and `sku`, not foreign keys.
+- **Database per service.** Each service owns a Cassandra keyspace that no other service reads, and
+  cross-service references use business keys such as `orderNumber` and `sku`, not foreign keys.
+- **Query-first tables.** Lookups are single-partition reads by business key. Listings (all orders,
+  shipments, low stock) scan the table and filter or sort in the service, which suits this data volume;
+  at scale, each would get a table partitioned for that query (e.g. shipments by status).
+- **Cache-aside.** catalog-service reads through Redis, and as the only writer it keeps the cache current on change.
 - **Saga (choreography).** A delivery spans three services with no distributed transaction:
   `SHIPMENT_DELIVERED` (shipment-service) → order `RECEIVED`, emits `ORDER_RECEIVED` (order-service) →
   stock increased (inventory-service).
 - **Idempotent consumers.** Kafka delivers at least once. inventory-service records processed event IDs, so a
-  redelivered `ORDER_RECEIVED` never books stock twice. order-service is idempotent by order state.
-- **Publish after commit.** Events are sent to Kafka only after the database transaction commits
-  (`@TransactionalEventListener`), so no service sees an event for a rolled-back change. For delivery
-  guarantees across crashes, the next step would be a transactional outbox.
+  redelivered `ORDER_RECEIVED` never books stock twice. The stock change and that record are written in
+  one logged batch. order-service is idempotent by order state.
+- **Publish after write.** Cassandra has no multi-row transactions, so services store a change first and
+  send its event to Kafka only once the write has succeeded: no service sees an event for a change that
+  was not stored. For delivery guarantees across crashes, the next step would be an outbox table written
+  in the same logged batch.
 - **Event-carried state transfer.** catalog-service publishes products to a compacted topic, and
   inventory-service keeps a local copy to render product details without a synchronous call.
 - **Synchronous calls where freshness matters.** order-service → catalog-service (a PO captures the current
@@ -88,7 +98,8 @@ replenishment and computer-vision dock inspection.
 
 ## Running the stack (Docker)
 
-The microservices need Kafka and Postgres, so Docker Compose is the way to run the platform:
+The microservices need Kafka, Cassandra and Redis, so Docker Compose is the way to run the platform
+(Cassandra takes a minute or so to become healthy on first start):
 
 ```bash
 (cd scm-stream-processor && ./gradlew shadowJar)   # builds the Flink job jar
@@ -122,9 +133,11 @@ Buildx, and the Docker Pipeline plugin.
 
 ### Developing without Docker
 
-Each service runs with `./gradlew :<service>:bootRun` from `scm-platform` (H2 in-memory database, ports
-8081–8085, gateway on 8080), but it needs a Kafka broker on `localhost:9092`. The AI service and UI run
-as before:
+Each service runs with `./gradlew :<service>:bootRun` from `scm-platform` (ports 8081–8085, gateway on
+8080). It needs a Kafka broker on `localhost:9092`, Cassandra on `localhost:9042` and, for catalog-service,
+Redis on `localhost:6379`. `docker compose up -d cassandra redis` starts the last two. The Java tests start
+their own Cassandra and Redis with Testcontainers, so `./gradlew build` needs Docker. The AI service and UI
+run as before:
 
 ```bash
 cd scm-ai-service

@@ -103,7 +103,7 @@ pipeline {
                 unstash 'flink-job'
                 sh '''
                     docker compose up -d --build --wait --wait-timeout 600 \
-                      kafka postgres jaeger \
+                      kafka cassandra redis jaeger \
                       catalog-service inventory-service order-service shipment-service alert-service api-gateway \
                       flink-jobmanager flink-taskmanager \
                       scm-ai
